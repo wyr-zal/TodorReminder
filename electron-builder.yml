@@ -1,0 +1,25 @@
+appId: com.focusmemo.app
+productName: 专注备忘录
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - package.json
+win:
+  target:
+    - dir
+  icon: resources/icon.ico
+mac:
+  target:
+    - dmg
+  icon: resources/icon.icns
+linux:
+  target:
+    - AppImage
+  icon: resources/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerLanguages:
+    - zh_CN

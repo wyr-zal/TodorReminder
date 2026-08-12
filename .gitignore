@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+release/
+release-*/
+out/
+icon-extract-temp/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Cache
+.cache/
+*.tsbuildinfo
+
+# Windows reserved names
+nul
+
+# Claude Code local files
+.claude/SESSION.md
+.claude/settings.local.json
+.claude/*.jpg
+.claude/*.png
+CONTEXT.md
+
+# Error logs
+*.txt.log
+erro.txt

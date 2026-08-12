@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>专注备忘录</title>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('focus-memo-theme-mode')
+          const mode = stored === 'light' || stored === 'dark' ? stored : 'system'
+          const dark = mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch {
+          // Renderer startup will apply the default system theme.
+        }
+      })()
+    </script>
+  </head>
+  <body class="bg-transparent">
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
