@@ -24,11 +24,6 @@ const electronAPI = {
       const handler = () => callback()
       ipcRenderer.on('window:focus-input', handler)
       return () => ipcRenderer.removeListener('window:focus-input', handler)
-    },
-    onResizeState: (callback: (isResizing: boolean) => void) => {
-      const handler = (_: unknown, isResizing: boolean) => callback(isResizing)
-      ipcRenderer.on(IPC_CHANNELS.WINDOW_RESIZE_STATE, handler)
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_RESIZE_STATE, handler)
     }
   },
 

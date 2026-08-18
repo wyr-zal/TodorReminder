@@ -94,7 +94,6 @@ export const IPC_CHANNELS = {
   WINDOW_TOGGLE_PIN: 'window:toggle-pin',
   WINDOW_GET_STATE: 'window:get-state',
   WINDOW_SET_STATE: 'window:set-state',
-  WINDOW_RESIZE_STATE: 'window:resize-state',
 
   // 数据操作
   MEMO_GET_ALL: 'memo:get-all',

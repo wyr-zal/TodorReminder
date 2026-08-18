@@ -7,6 +7,7 @@ import {
   restoreTextareaSelection,
   saveClipboardImages
 } from '../utils/memoPaste'
+import { thumbImageUrl } from '../utils/imageUrl'
 
 interface MemoInputProps {
   inputRef: RefObject<HTMLTextAreaElement>
@@ -199,15 +200,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
 }
 
 function ImagePreview({ filename, className }: { filename: string; className?: string }) {
-  const [src, setSrc] = useState<string | null>(null)
-
-  useEffect(() => {
-    window.electronAPI.image.get(filename).then(setSrc)
-  }, [filename])
-
-  if (!src) return <div className={`bg-slate-200 animate-pulse rounded-lg`} style={{ width: 80, height: 56 }} />
-
-  return <img src={src} alt="" className={className} />
+  return <img src={thumbImageUrl(filename)} alt="" className={className} />
 }
 
 export default MemoInput

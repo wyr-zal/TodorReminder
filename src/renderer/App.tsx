@@ -36,10 +36,6 @@ function App() {
       inputRef.current?.focus()
     })
 
-    const unsubscribeResizeState = window.electronAPI.window.onResizeState((resizing) => {
-      document.getElementById('root')?.classList.toggle('window-resizing', resizing)
-    })
-
     const unsubscribeSync = window.electronAPI.sync.onComplete((result) => {
       if (result.success) loadMemos()
     })
@@ -47,7 +43,6 @@ function App() {
     return () => {
       unsubscribeTheme()
       unsubscribeFocus()
-      unsubscribeResizeState()
       unsubscribeSync()
     }
   }, [loadMemos])

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemoStore } from '../store/memoStore'
 import MemoItem from './MemoItem'
 import FilterBar from './FilterBar'
@@ -36,6 +37,14 @@ function MemoList() {
     })
   }, [filteredMemos])
 
+
+  const rowVirtualizer = useVirtualizer({
+    count: sortedMemos.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 96,
+    overscan: 8,
+    getItemKey: (index) => sortedMemos[index].id
+  })
 
   const clearHideTimer = () => {
     if (hideTimerRef.current !== null) {
@@ -119,9 +128,20 @@ function MemoList() {
               <p className="text-xs text-slate-400 tracking-wide">暂无记录</p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {sortedMemos.map((memo) => (
-                <MemoItem key={memo.id} memo={memo} />
+            <div
+              className="relative w-full"
+              style={{ height: rowVirtualizer.getTotalSize() }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute top-0 left-0 w-full pb-1.5"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <MemoItem memo={sortedMemos[virtualRow.index]} />
+                </div>
               ))}
             </div>
           )}

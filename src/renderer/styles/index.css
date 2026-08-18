@@ -128,20 +128,6 @@ html.dark .hover\:text-rose-500:hover { color: #fb7185; }
 html.dark .hover\:border-slate-200:hover { border-color: #526177; }
 html.dark .focus\:bg-white:focus { background-color: #1e293b; }
 
-/* 缩放时隐藏标题栏以下内容 */
-#root.window-resizing .window-shell > *:not(:first-child) {
-  visibility: hidden;
-}
-
-#root.window-resizing *,
-#root.window-resizing *::before,
-#root.window-resizing *::after {
-  animation: none !important;
-  transition: none !important;
-  box-shadow: none !important;
-  will-change: auto !important;
-}
-
 /* 自定义滚动条 */
 ::-webkit-scrollbar {
   width: 4px;

@@ -7,6 +7,7 @@ import {
   restoreTextareaSelection,
   saveClipboardImages
 } from '../utils/memoPaste'
+import { thumbImageUrl, fullImageUrl } from '../utils/imageUrl'
 
 interface MemoItemProps {
   memo: Memo
@@ -312,6 +313,8 @@ function MemoItem({ memo }: MemoItemProps) {
   }
 
   const hasImage = memo.type === 'image' && memo.attachments.length > 0
+  // 虚拟列表滚动时条目会重新挂载，入场动画只给新建的备忘播放
+  const isFreshMemo = Date.now() - new Date(memo.createdAt).getTime() < 1500
   const copyLabel = copyState === 'copying'
     ? '正在复制待办'
     : copyState === 'success'
@@ -333,7 +336,9 @@ function MemoItem({ memo }: MemoItemProps) {
   return (
     <>
       <div
-        className={`group relative flex gap-2.5 px-3 py-2.5 bg-white rounded-xl border border-slate-100 shadow-card hover:border-slate-200 hover:shadow-card-hover transition-all duration-200 animate-card-in ${
+        className={`group relative flex gap-2.5 px-3 py-2.5 bg-white rounded-xl border border-slate-100 shadow-card hover:border-slate-200 hover:shadow-card-hover transition-all duration-200 ${
+          isFreshMemo ? 'animate-card-in' : ''
+        } ${
           memo.status === 'completed' ? 'opacity-55' : ''
         }`}
       >
@@ -651,21 +656,14 @@ async function copyImageFromEvent(
 }
 
 function ImageThumbnail({ filename, onClick }: { filename: string; onClick: () => void }) {
-  const [src, setSrc] = useState<string | null>(null)
   const [imageCopyState, setImageCopyState] = useState<ImageCopyState>('idle')
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    window.electronAPI.image.get(filename).then(setSrc)
-  }, [filename])
 
   useEffect(() => {
     return () => {
       if (imageCopyTimerRef.current) clearTimeout(imageCopyTimerRef.current)
     }
   }, [])
-
-  if (!src) return <div className="w-14 h-10 bg-slate-200 rounded-lg animate-pulse" />
 
   const copyTitle = getImageCopyTitle(imageCopyState)
   const copyClass = imageCopyState === 'success'
@@ -677,7 +675,7 @@ function ImageThumbnail({ filename, onClick }: { filename: string; onClick: () =
   return (
     <div className="relative group/img inline-flex">
       <img
-        src={src}
+        src={thumbImageUrl(filename)}
         alt=""
         className="max-h-16 rounded-lg cursor-pointer hover:opacity-85 transition-opacity object-cover"
         onClick={onClick}
@@ -697,17 +695,9 @@ function ImageThumbnail({ filename, onClick }: { filename: string; onClick: () =
 }
 
 function EditImagePreview({ filename, onRemove }: { filename: string; onRemove: () => void }) {
-  const [src, setSrc] = useState<string | null>(null)
-
-  useEffect(() => {
-    window.electronAPI.image.get(filename).then(setSrc)
-  }, [filename])
-
-  if (!src) return <div className="w-12 h-12 bg-slate-200 rounded-lg animate-pulse" />
-
   return (
     <div className="relative group/img">
-      <img src={src} alt="" className="w-12 h-12 object-cover rounded-lg" />
+      <img src={thumbImageUrl(filename)} alt="" className="w-12 h-12 object-cover rounded-lg" />
       <button
         type="button"
         onClick={onRemove}
@@ -723,16 +713,13 @@ function EditImagePreview({ filename, onRemove }: { filename: string; onRemove: 
 
 function ImageModal({ attachments, initialIndex, onClose }: { attachments: string[]; initialIndex: number; onClose: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
-  const [src, setSrc] = useState<string | null>(null)
   const [imageCopyState, setImageCopyState] = useState<ImageCopyState>('idle')
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentFilename = attachments[currentIndex]
   const hasMultiple = attachments.length > 1
 
   useEffect(() => {
-    setSrc(null)
     setImageCopyState('idle')
-    window.electronAPI.image.get(currentFilename).then(setSrc)
   }, [currentFilename])
 
   useEffect(() => {
@@ -776,11 +763,7 @@ function ImageModal({ attachments, initialIndex, onClose }: { attachments: strin
       onClick={onClose}
     >
       <div className="relative max-w-[90%] max-h-[90%]" onClick={e => e.stopPropagation()}>
-        {src ? (
-          <img src={src} alt="" className="max-w-full max-h-full rounded-xl shadow-2xl" />
-        ) : (
-          <div className="w-64 h-48 bg-slate-200 rounded-xl animate-pulse" />
-        )}
+        <img src={fullImageUrl(currentFilename)} alt="" className="max-w-full max-h-full rounded-xl shadow-2xl" />
 
         {hasMultiple && (
           <button

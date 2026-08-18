@@ -1,6 +1,7 @@
-import { app, BrowserWindow, screen, ipcMain, globalShortcut, Tray, Menu, nativeImage, clipboard, Notification, dialog } from 'electron'
+import { app, BrowserWindow, screen, ipcMain, globalShortcut, Tray, Menu, nativeImage, clipboard, Notification, dialog, protocol, net } from 'electron'
 import { execFileSync } from 'child_process'
 import { basename, dirname, join } from 'path'
+import { pathToFileURL } from 'url'
 import * as fs from 'fs'
 import {
   IPC_CHANNELS,
@@ -22,7 +23,7 @@ import {
 } from '../shared/memoClipboard'
 import { initDatabase, closeDatabase, getAllMemos, createMemo, updateMemo, deleteMemo, getDeletedMemos, restoreMemo, hardDeleteMemo, exportToJSON, importFromJSON } from './database'
 import { loadSyncConfig, saveSyncConfig, getSyncStatus, sync } from './sync'
-import { saveImage, getImageBase64, getImageBuffer, getExistingImagePath, deleteImage, exportImage } from './image'
+import { saveImage, getImageBase64, getImageBuffer, getExistingImagePath, deleteImage, exportImage, ensureThumbnail } from './image'
 import { constrainWindowBounds, loadWindowState, saveWindowState } from './window-state'
 import { migrateStorageData, resolveStorageInfo } from './storage'
 
@@ -34,7 +35,6 @@ let isAlwaysOnTop = true
 let savedBounds: Electron.Rectangle | null = null  // 保存隐藏前的位置
 let moveTimeout: NodeJS.Timeout | null = null  // 防抖定时器
 let resizeTimeout: NodeJS.Timeout | null = null
-let isWindowResizing = false
 let lastClickTime = 0  // 用于检测双击
 const DEFAULT_WINDOW_WIDTH = 480
 const DEFAULT_WINDOW_HEIGHT = 720
@@ -52,6 +52,43 @@ let windowState: WindowState = {
 }
 
 const HIDDEN_VISIBLE_WIDTH = 8
+
+// 图片资源协议：memo-img://thumb/<文件名> 取缩略图，memo-img://full/<文件名> 取原图
+const IMAGE_PROTOCOL_SCHEME = 'memo-img'
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: IMAGE_PROTOCOL_SCHEME,
+    privileges: { standard: true, secure: true, stream: true }
+  }
+])
+
+function registerImageProtocol(): void {
+  protocol.handle(IMAGE_PROTOCOL_SCHEME, async (request) => {
+    try {
+      const url = new URL(request.url)
+      const variant = url.host
+      const filename = decodeURIComponent(url.pathname.replace(/^\//, ''))
+
+      if (typeof filename !== 'string' || basename(filename) !== filename) {
+        return new Response(null, { status: 400 })
+      }
+
+      const filePath = variant === 'thumb'
+        ? await ensureThumbnail(filename)
+        : getExistingImagePath(filename)
+
+      if (!filePath) {
+        return new Response(null, { status: 404 })
+      }
+
+      return net.fetch(pathToFileURL(filePath).toString())
+    } catch (error) {
+      console.error('memo-img protocol error:', error)
+      return new Response(null, { status: 500 })
+    }
+  })
+}
 const ALWAYS_ON_TOP_LEVEL = 'screen-saver' as const
 const RESIZE_SETTLE_DELAY = 80
 const SILENT_STARTUP_ARG = '--focus-memo-silent-startup'
@@ -326,24 +363,6 @@ function syncAlwaysOnTop(moveToTop = false) {
   ensureSkipTaskbar()
 }
 
-function emitResizeState(isResizing: boolean) {
-  if (!mainWindow || mainWindow.isDestroyed() || isWindowResizing === isResizing) {
-    return
-  }
-
-  isWindowResizing = isResizing
-  mainWindow.webContents.send(IPC_CHANNELS.WINDOW_RESIZE_STATE, isResizing)
-}
-
-function markResizeStart() {
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout)
-    resizeTimeout = null
-  }
-
-  emitResizeState(true)
-}
-
 function updateWindowStateBounds(bounds: Electron.Rectangle) {
   windowState = {
     ...windowState,
@@ -378,7 +397,6 @@ function scheduleResizeEnd() {
       updateWindowStateBounds(bounds)
       persistWindowBounds(bounds)
     }
-    emitResizeState(false)
   }, RESIZE_SETTLE_DELAY)
 }
 
@@ -576,10 +594,6 @@ function createWindow(options: { showOnCreate?: boolean } = {}) {
     scheduleMoveEnd()
   })
 
-  mainWindow.on('will-resize', () => {
-    markResizeStart()
-  })
-
   mainWindow.on('resize', () => {
     scheduleResizeEnd()
   })
@@ -597,7 +611,6 @@ function createWindow(options: { showOnCreate?: boolean } = {}) {
       clearTimeout(resizeTimeout)
       resizeTimeout = null
     }
-    isWindowResizing = false
     mainWindow = null
   })
 }
@@ -1174,6 +1187,7 @@ function startApp(): void {
   configureStorageDirectory()
   normalizeOpenAtLoginForSilentStartup()
   initDatabase()
+  registerImageProtocol()
   createWindow({ showOnCreate: !startSilently })
   createTray()
   registerShortcuts()

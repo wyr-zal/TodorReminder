@@ -5,6 +5,8 @@ import * as fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 
 const ATTACHMENTS_DIR = 'attachments'
+const THUMBS_DIR = '.thumbs'
+const THUMB_MAX_SIZE = 320
 
 export interface ImageSaveOptions {
   compress: boolean
@@ -73,6 +75,9 @@ export async function saveImage(buffer: Buffer, options: Partial<ImageSaveOption
     // 写入文件
     fs.writeFileSync(filepath, processedBuffer)
 
+    // 生成缩略图（失败不影响保存）
+    await generateThumbnail(filename).catch(() => null)
+
     return filename
   } catch (error) {
     console.error('Failed to save image:', error)
@@ -102,12 +107,66 @@ export function getImageBuffer(filename: string): Buffer | null {
 }
 
 export function deleteImage(filename: string): boolean {
+  const thumbPath = getThumbnailPath(filename)
+  if (fs.existsSync(thumbPath)) {
+    fs.unlinkSync(thumbPath)
+  }
+
   const filepath = getImagePath(filename)
   if (fs.existsSync(filepath)) {
     fs.unlinkSync(filepath)
     return true
   }
   return false
+}
+
+function getThumbsDir(): string {
+  return join(getAttachmentsDir(), THUMBS_DIR)
+}
+
+export function getThumbnailPath(filename: string): string {
+  return join(getThumbsDir(), filename)
+}
+
+async function generateThumbnail(filename: string): Promise<string | null> {
+  const sourcePath = getExistingImagePath(filename)
+  if (!sourcePath) {
+    return null
+  }
+
+  const thumbsDir = getThumbsDir()
+  if (!fs.existsSync(thumbsDir)) {
+    fs.mkdirSync(thumbsDir, { recursive: true })
+  }
+
+  const thumbPath = getThumbnailPath(filename)
+  await sharp(sourcePath)
+    .resize(THUMB_MAX_SIZE, THUMB_MAX_SIZE, {
+      fit: 'inside',
+      withoutEnlargement: true
+    })
+    .toFile(thumbPath)
+  return thumbPath
+}
+
+// 返回缩略图路径；旧图片没有缩略图时现场补生成，失败则回退原图
+export async function ensureThumbnail(filename: string): Promise<string | null> {
+  const sourcePath = getExistingImagePath(filename)
+  if (!sourcePath) {
+    return null
+  }
+
+  const thumbPath = getThumbnailPath(filename)
+  if (fs.existsSync(thumbPath)) {
+    return thumbPath
+  }
+
+  try {
+    return await generateThumbnail(filename)
+  } catch (error) {
+    console.error('Failed to generate thumbnail:', error)
+    return sourcePath
+  }
 }
 
 export function getImageBase64(filename: string): string | null {
