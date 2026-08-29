@@ -21,6 +21,7 @@ export function initDatabase(): void {
       tags TEXT DEFAULT '[]',
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
+      completedAt TEXT,
       deviceId TEXT,
       deleted INTEGER DEFAULT 0
     )
@@ -32,6 +33,18 @@ export function initDatabase(): void {
   } catch (e) {
     // 列已存在，忽略错误
   }
+
+  // 迁移：添加 completedAt 列，并用最后更新时间近似回填历史完成记录
+  try {
+    db.exec(`ALTER TABLE memos ADD COLUMN completedAt TEXT`)
+  } catch (e) {
+    // 列已存在，忽略错误
+  }
+  db.exec(`
+    UPDATE memos
+    SET completedAt = updatedAt
+    WHERE status = 'completed' AND completedAt IS NULL
+  `)
 
   // 创建索引
   db.exec(`
@@ -82,8 +95,8 @@ export function createMemo(memo: Memo): Memo {
   if (!db) throw new Error('Database not initialized')
 
   const stmt = db.prepare(`
-    INSERT INTO memos (id, content, type, priority, status, attachments, tags, createdAt, updatedAt, deviceId, deleted)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memos (id, content, type, priority, status, attachments, tags, createdAt, updatedAt, completedAt, deviceId, deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   stmt.run(
@@ -96,6 +109,7 @@ export function createMemo(memo: Memo): Memo {
     JSON.stringify(memo.tags || []),
     memo.createdAt,
     memo.updatedAt,
+    memo.completedAt,
     memo.deviceId,
     memo.deleted ? 1 : 0
   )
@@ -117,7 +131,7 @@ export function updateMemo(id: string, updates: Partial<Memo>): Memo | null {
 
   const stmt = db.prepare(`
     UPDATE memos
-    SET content = ?, type = ?, priority = ?, status = ?, attachments = ?, tags = ?, updatedAt = ?, deleted = ?
+    SET content = ?, type = ?, priority = ?, status = ?, attachments = ?, tags = ?, updatedAt = ?, completedAt = ?, deleted = ?
     WHERE id = ?
   `)
 
@@ -129,6 +143,7 @@ export function updateMemo(id: string, updates: Partial<Memo>): Memo | null {
     JSON.stringify(updated.attachments),
     JSON.stringify(updated.tags || []),
     updated.updatedAt,
+    updated.completedAt,
     updated.deleted ? 1 : 0,
     id
   )
@@ -199,12 +214,16 @@ export function importFromJSON(data: { memos: Memo[] }): void {
   if (!db) return
 
   const insertOrUpdate = db.prepare(`
-    INSERT OR REPLACE INTO memos (id, content, type, priority, status, attachments, tags, createdAt, updatedAt, deviceId, deleted)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO memos (id, content, type, priority, status, attachments, tags, createdAt, updatedAt, completedAt, deviceId, deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const transaction = db.transaction((memos: Memo[]) => {
     for (const memo of memos) {
+      const completedAt = memo.status === 'completed'
+        ? memo.completedAt ?? memo.updatedAt
+        : null
+
       insertOrUpdate.run(
         memo.id,
         memo.content,
@@ -215,6 +234,7 @@ export function importFromJSON(data: { memos: Memo[] }): void {
         JSON.stringify(memo.tags || []),
         memo.createdAt,
         memo.updatedAt,
+        completedAt,
         memo.deviceId,
         memo.deleted ? 1 : 0
       )

@@ -14,6 +14,7 @@ export interface Memo {
   tags: string[]
   createdAt: string
   updatedAt: string
+  completedAt: string | null
   deviceId: string
   deleted: boolean
 }
@@ -90,6 +91,7 @@ export type TagSortMode = 'latest' | 'count' | 'alpha'
 export const IPC_CHANNELS = {
   // 窗口操作
   WINDOW_MINIMIZE: 'window:minimize',
+  WINDOW_HIDE: 'window:hide',
   WINDOW_CLOSE: 'window:close',
   WINDOW_TOGGLE_PIN: 'window:toggle-pin',
   WINDOW_GET_STATE: 'window:get-state',

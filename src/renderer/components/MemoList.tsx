@@ -28,7 +28,13 @@ function MemoList() {
       const aCompleted = a.status === 'completed' ? 1 : 0
       const bCompleted = b.status === 'completed' ? 1 : 0
       if (aCompleted !== bCompleted) return aCompleted - bCompleted
-      // 同组内按优先级 + 时间排序
+      // 已完成记录按点击完成时间倒序，不再受优先级影响
+      if (a.status === 'completed' && b.status === 'completed') {
+        const completedTimeDiff = (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt)
+        if (completedTimeDiff !== 0) return completedTimeDiff
+        return b.createdAt.localeCompare(a.createdAt)
+      }
+      // 未完成记录按优先级 + 创建时间排序
       const priorityOrder = { high: 0, medium: 1, low: 2 }
       if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
         return priorityOrder[a.priority] - priorityOrder[b.priority]

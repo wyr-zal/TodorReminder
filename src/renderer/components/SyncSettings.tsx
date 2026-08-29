@@ -190,7 +190,7 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-[2px]">
+    <div data-modal className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-[2px]">
       <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden border border-slate-100">
         {/* 头部 */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4">

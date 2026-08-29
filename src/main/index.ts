@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, globalShortcut, Tray, Menu, nativeImage, clipboard, Notification, dialog, protocol, net } from 'electron'
+import { app, BrowserWindow, screen, ipcMain, globalShortcut, Tray, Menu, nativeImage, clipboard, Notification, dialog, protocol, net, shell } from 'electron'
 import { execFileSync } from 'child_process'
 import { basename, dirname, join } from 'path'
 import { pathToFileURL } from 'url'
@@ -547,6 +547,7 @@ function createWindow(options: { showOnCreate?: boolean } = {}) {
     alwaysOnTop: isAlwaysOnTop,
     skipTaskbar: true,
     resizable: true,
+    maximizable: false,
     roundedCorners: false,
     backgroundColor: '#F8FAFC',
     minWidth: WINDOW_MIN_WIDTH,
@@ -743,8 +744,8 @@ function createTray() {
 }
 
 function registerShortcuts() {
-  // 全局快捷键呼出/隐藏窗口
-  globalShortcut.register('CommandOrControl+Shift+M', () => {
+  // 全局快捷键呼出/隐藏窗口（左手单手操作）
+  globalShortcut.register('Alt+Q', () => {
     if (mainWindow) {
       const display = screen.getPrimaryDisplay()
       const { width: screenWidth, height: screenHeight } = display.workArea
@@ -785,6 +786,10 @@ function setupIPC() {
   // 窗口操作
   ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
     mainWindow?.minimize()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_HIDE, () => {
+    mainWindow?.hide()
   })
 
   ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, () => {
@@ -1105,6 +1110,27 @@ function setupIPC() {
       return true
     } catch (error) {
       console.error('Failed to copy image path:', error)
+      return false
+    }
+  })
+
+  // 用系统默认程序打开原图
+  ipcMain.handle('image:open-external', async (_, filename: string) => {
+    try {
+      const imagePath = getExistingImagePath(filename)
+      if (!imagePath) {
+        return false
+      }
+
+      // openPath 成功返回空串，失败返回错误信息
+      const error = await shell.openPath(imagePath)
+      if (error) {
+        console.error('Failed to open image externally:', error)
+        return false
+      }
+      return true
+    } catch (error) {
+      console.error('Failed to open image externally:', error)
       return false
     }
   })

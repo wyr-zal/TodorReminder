@@ -437,7 +437,7 @@ function MemoItem({ memo }: MemoItemProps) {
                 <ImageThumbnail
                   key={filename}
                   filename={filename}
-                  onClick={() => { setPreviewImageIndex(index); setShowImagePreview(true) }}
+                  onPreview={() => { setPreviewImageIndex(index); setShowImagePreview(true) }}
                 />
               ))}
             </div>
@@ -607,6 +607,17 @@ function ImageCopyIcon({ state }: { state: ImageCopyState }) {
   )
 }
 
+function PreviewInWindowIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="M21 3l-7 7" />
+      <path d="M3 21l7-7" />
+    </svg>
+  )
+}
+
 function SaveImageIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -655,7 +666,7 @@ async function copyImageFromEvent(
   }, 1500)
 }
 
-function ImageThumbnail({ filename, onClick }: { filename: string; onClick: () => void }) {
+function ImageThumbnail({ filename, onPreview }: { filename: string; onPreview: () => void }) {
   const [imageCopyState, setImageCopyState] = useState<ImageCopyState>('idle')
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -665,12 +676,18 @@ function ImageThumbnail({ filename, onClick }: { filename: string; onClick: () =
     }
   }, [])
 
+  const handleOpenExternal = async () => {
+    const opened = await window.electronAPI.image.openExternal(filename)
+    if (!opened) onPreview()
+  }
+
   const copyTitle = getImageCopyTitle(imageCopyState)
   const copyClass = imageCopyState === 'success'
     ? 'bg-emerald-500 text-white opacity-100'
     : imageCopyState === 'error'
       ? 'bg-rose-500 text-white opacity-100'
       : 'bg-slate-900/70 text-white opacity-0 group-hover/img:opacity-100 hover:bg-indigo-500'
+  const actionClass = 'w-6 h-6 rounded-full shadow-md flex items-center justify-center transition-all active:scale-95 cursor-pointer opacity-0 group-hover/img:opacity-100'
 
   return (
     <div className="relative group/img inline-flex">
@@ -678,18 +695,32 @@ function ImageThumbnail({ filename, onClick }: { filename: string; onClick: () =
         src={thumbImageUrl(filename)}
         alt=""
         className="max-h-16 rounded-lg cursor-pointer hover:opacity-85 transition-opacity object-cover"
-        onClick={onClick}
+        onClick={handleOpenExternal}
       />
-      <button
-        type="button"
-        onClick={(event) => copyImageFromEvent(filename, event, setImageCopyState, imageCopyTimerRef)}
-        disabled={imageCopyState === 'copying'}
-        aria-label={copyTitle}
-        title={copyTitle}
-        className={`absolute -top-1 -right-1 w-6 h-6 rounded-full shadow-md flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:cursor-wait ${copyClass}`}
-      >
-        <ImageCopyIcon state={imageCopyState} />
-      </button>
+      <div className="absolute -top-1 -right-1 flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onPreview()
+          }}
+          aria-label="在窗口内预览图片"
+          title="在窗口内预览图片"
+          className={`${actionClass} bg-white text-slate-600 hover:text-indigo-600 hover:bg-white`}
+        >
+          <PreviewInWindowIcon />
+        </button>
+        <button
+          type="button"
+          onClick={(event) => copyImageFromEvent(filename, event, setImageCopyState, imageCopyTimerRef)}
+          disabled={imageCopyState === 'copying'}
+          aria-label={copyTitle}
+          title={copyTitle}
+          className={`${actionClass} disabled:cursor-wait ${copyClass}`}
+        >
+          <ImageCopyIcon state={imageCopyState} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -759,6 +790,7 @@ function ImageModal({ attachments, initialIndex, onClose }: { attachments: strin
 
   return (
     <div
+      data-modal
       className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 backdrop-blur-sm"
       onClick={onClose}
     >

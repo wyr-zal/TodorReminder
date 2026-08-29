@@ -15,6 +15,7 @@ const electronAPI = {
   // 窗口操作
   window: {
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
+    hide: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_HIDE),
     close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
     togglePin: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_TOGGLE_PIN),
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_STATE) as Promise<WindowState>,
@@ -91,7 +92,8 @@ const electronAPI = {
     copy: (filename: string) => ipcRenderer.invoke('image:copy', filename) as Promise<boolean>,
     copyPath: (filename: string) => ipcRenderer.invoke('image:copy-path', filename) as Promise<boolean>,
     pasteFromClipboard: () => ipcRenderer.invoke('image:paste-from-clipboard') as Promise<string | null>,
-    saveToFile: (filename: string) => ipcRenderer.invoke('image:save-to-file', filename) as Promise<boolean>
+    saveToFile: (filename: string) => ipcRenderer.invoke('image:save-to-file', filename) as Promise<boolean>,
+    openExternal: (filename: string) => ipcRenderer.invoke('image:open-external', filename) as Promise<boolean>
   }
 }
 

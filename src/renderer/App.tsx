@@ -47,6 +47,28 @@ function App() {
     }
   }, [loadMemos])
 
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      const isCtrlW = event.ctrlKey && event.key.toLowerCase() === 'w'
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const isEditing = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'))
+
+      // 输入文本或操作弹窗时，不抢占其快捷键；同时阻止 Ctrl + W 触发默认关闭行为。
+      if (isEditing || document.querySelector('[data-modal]')) {
+        if (isCtrlW) event.preventDefault()
+        return
+      }
+
+      if (event.defaultPrevented || event.isComposing || (event.key !== 'Escape' && !isCtrlW)) return
+
+      event.preventDefault()
+      void window.electronAPI.window.hide()
+    }
+
+    window.addEventListener('keydown', handleWindowKeyDown)
+    return () => window.removeEventListener('keydown', handleWindowKeyDown)
+  }, [])
+
   const handleSnapToEdge = () => {
     window.electronAPI.window.snapToEdge()
   }

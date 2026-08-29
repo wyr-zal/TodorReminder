@@ -62,6 +62,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       tags,
       createdAt: now,
       updatedAt: now,
+      completedAt: null,
       deviceId: 'desktop',
       deleted: false
     }
@@ -86,6 +87,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       tags,
       createdAt: now,
       updatedAt: now,
+      completedAt: null,
       deviceId: 'desktop',
       deleted: false
     }
@@ -134,7 +136,11 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       completed: 'deferred',
       deferred: 'pending'
     }
-    get().updateMemo(id, { status: nextStatus[memo.status] })
+    const status = nextStatus[memo.status]
+    get().updateMemo(id, {
+      status,
+      completedAt: status === 'completed' ? new Date().toISOString() : null
+    })
   },
 
   setFilter: (filter: MemoStatus | 'all') => set({ filter }),
