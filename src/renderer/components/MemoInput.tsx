@@ -43,7 +43,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
     const { content: cleanContent, tags } = parseTagsFromContent(content)
 
     if (pendingImages.length > 0) {
-      await addImageMemo(cleanContent || '图片备忘', priority, pendingImages, tags)
+      await addImageMemo(cleanContent, priority, pendingImages, tags)
       setPendingImages([])
     } else {
       addMemo(cleanContent, priority, tags)
@@ -135,16 +135,24 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
     setPendingImages(prev => prev.filter(f => f !== filename))
   }
 
+  const openPendingImage = (filename: string) => {
+    window.electronAPI.image.openExternal(filename)
+  }
+
   const cfg = priorityConfig[priority]
 
   return (
     <div className="h-full flex flex-col px-3 py-2.5 border-b border-slate-100 bg-white">
       {/* 待添加的图片预览 */}
       {pendingImages.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2 flex-shrink-0">
+        <div className="mb-1.5 flex flex-wrap gap-1.5 flex-shrink-0">
           {pendingImages.map((filename) => (
             <div key={filename} className="relative inline-block">
-              <ImagePreview filename={filename} className="max-h-20 rounded-lg object-cover" />
+              <ImagePreview
+                filename={filename}
+                className="max-h-11 rounded-md object-cover cursor-pointer hover:opacity-85 transition-opacity"
+                onClick={() => openPendingImage(filename)}
+              />
               <button
                 onClick={() => removePendingImage(filename)}
                 className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-slate-700 text-white rounded-full text-[10px] flex items-center justify-center hover:bg-slate-900 transition-colors cursor-pointer"
@@ -199,8 +207,16 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
   )
 }
 
-function ImagePreview({ filename, className }: { filename: string; className?: string }) {
-  return <img src={thumbImageUrl(filename)} alt="" className={className} />
+function ImagePreview({
+  filename,
+  className,
+  onClick
+}: {
+  filename: string
+  className?: string
+  onClick?: () => void
+}) {
+  return <img src={thumbImageUrl(filename)} alt="" className={className} onClick={onClick} />
 }
 
 export default MemoInput

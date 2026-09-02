@@ -69,8 +69,9 @@ function StatusIcon({ status }: { status: MemoStatus }) {
 }
 
 function MemoItem({ memo }: MemoItemProps) {
+  const memoContent = memo.type === 'image' && memo.content === '图片备忘' ? '' : memo.content
   const [isEditing, setIsEditing] = useState(false)
-  const [editContent, setEditContent] = useState(memo.content)
+  const [editContent, setEditContent] = useState(memoContent)
   const [editAttachments, setEditAttachments] = useState<string[]>(memo.attachments || [])
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
@@ -163,7 +164,7 @@ function MemoItem({ memo }: MemoItemProps) {
     if (editContent.trim() || editAttachments.length > 0) {
       const { content, tags } = parseTagsFromContent(editContent)
       updateMemo(memo.id, {
-        content: content || memo.content,
+        content: editAttachments.length > 0 ? content : content || memo.content,
         tags,
         attachments: editAttachments,
         type: editAttachments.length > 0 ? 'image' : 'text'
@@ -258,7 +259,7 @@ function MemoItem({ memo }: MemoItemProps) {
 
     try {
       const request = {
-        content: memo.content,
+        content: memoContent,
         priority: memo.priority,
         tags: memo.tags || [],
         attachments: memo.attachments || []
@@ -286,14 +287,14 @@ function MemoItem({ memo }: MemoItemProps) {
   }
 
   const cancelEditing = () => {
-    setEditContent(memo.content)
+    setEditContent(memoContent)
     setEditAttachments(memo.attachments || [])
     setIsEditing(false)
   }
 
   const startEditing = () => {
     const tagsStr = (memo.tags || []).map(t => `#${t}`).join(' ')
-    setEditContent(memo.content + (tagsStr ? ' ' + tagsStr : ''))
+    setEditContent(memoContent + (tagsStr ? ' ' + tagsStr : ''))
     setEditAttachments(memo.attachments || [])
     setIsEditing(true)
   }
@@ -419,16 +420,16 @@ function MemoItem({ memo }: MemoItemProps) {
                 </div>
               )}
             </div>
-          ) : (
+          ) : memoContent ? (
             <p
               className={`text-sm leading-relaxed break-words cursor-pointer whitespace-pre-wrap ${
                 memo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
               }`}
               onDoubleClick={startEditing}
             >
-              {memo.content}
+              {memoContent}
             </p>
-          )}
+          ) : null}
 
           {/* 图片附件 */}
           {!isEditing && hasImage && (
