@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useLayoutEffect } from 'react'
-import { useMemoStore } from '../store/memoStore'
+import { useMemoStore, type StatusFilter } from '../store/memoStore'
 import { Priority } from '../../shared/types'
 
 type TagExpandLevel = 'collapsed' | 'preview' | 'full'
@@ -8,18 +8,93 @@ const TAGS_LINE_HEIGHT = 26
 const TAGS_COLLAPSED_MAX_HEIGHT = TAGS_LINE_HEIGHT
 const TAGS_PREVIEW_MAX_HEIGHT = TAGS_LINE_HEIGHT * 3
 
-const priorityFilters: { value: Priority | 'all'; label: string }[] = [
-  { value: 'all', label: '全部优先级' },
+// 优先级循环切换：点击依次切换，信号条颜色即当前筛选态
+const priorityCycle: { value: Priority | 'all'; label: string }[] = [
+  { value: 'all', label: '全部' },
   { value: 'high', label: '高优先' },
   { value: 'medium', label: '中优先' },
   { value: 'low', label: '低优先' }
 ]
 
+// 状态循环切换：◐ 全部 → ◔ 未完成（含延后） → ●✓ 已完成
+const statusCycle = [
+  { value: 'all', label: '全部' },
+  { value: 'incomplete', label: '未完成（含延后）' },
+  { value: 'completed', label: '已完成' }
+] as const
+
+// 优先级信号条：三根高度递增的圆角竖条，全部态三色各一，筛选态单色
+function PriorityBarsIcon({ filter }: { filter: Priority | 'all' }) {
+  const bars =
+    filter === 'high'
+      ? ['fill-rose-500', 'fill-rose-500', 'fill-rose-500']
+      : filter === 'medium'
+        ? ['fill-amber-500', 'fill-amber-500', 'fill-amber-500']
+        : filter === 'low'
+          ? ['fill-emerald-500', 'fill-emerald-500', 'fill-emerald-500']
+          : ['fill-rose-500', 'fill-amber-500', 'fill-emerald-500']
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 14 14" aria-hidden="true">
+      <rect x="1" y="9" width="2.6" height="4" rx="1.3" className={bars[0]} />
+      <rect x="5.7" y="5" width="2.6" height="8" rx="1.3" className={bars[1]} />
+      <rect x="10.4" y="1" width="2.6" height="12" rx="1.3" className={bars[2]} />
+    </svg>
+  )
+}
+
+// 状态圆环家族：◐ 半填充圆（全部）/ ◔ 缺口进度环（未完成）/ ●✓ 实心圆白勾（已完成）
+function StatusIcon({ filter }: { filter: StatusFilter }) {
+  if (filter === 'completed') {
+    return (
+      <svg className="h-4 w-4" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" className="fill-emerald-500" />
+        <path
+          d="M4.6 8.3l2.3 2.3 4.5-5"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
+  if (filter === 'incomplete') {
+    return (
+      <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray="28.27 37.7"
+        />
+      </svg>
+    )
+  }
+  return (
+    <svg className="h-4 w-4 text-slate-400" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" />
+      <path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor" />
+    </svg>
+  )
+}
+
 const tagButtonBase =
   'inline-flex h-[22px] items-center align-top mr-1 px-2 text-[11px] rounded-md transition-colors cursor-pointer'
 
 function FilterBar() {
-  const { priorityFilter, setPriorityFilter, tagFilter, setTagFilter, getAllTags } = useMemoStore()
+  const {
+    filter,
+    setFilter,
+    priorityFilter,
+    setPriorityFilter,
+    tagFilter,
+    setTagFilter,
+    getAllTags
+  } = useMemoStore()
   const allTags = getAllTags()
   const allTagsKey = allTags.join('\u0000')
   const [tagExpandLevel, setTagExpandLevel] = useState<TagExpandLevel>('collapsed')
@@ -62,6 +137,21 @@ function FilterBar() {
       setTagExpandLevel('preview')
     }
   }
+
+  // 循环切换优先级：灰(全部) → 红 → 橙 → 绿 → 灰
+  const handlePriorityCycle = () => {
+    const idx = priorityCycle.findIndex((p) => p.value === priorityFilter)
+    setPriorityFilter(priorityCycle[(idx + 1) % priorityCycle.length].value)
+  }
+
+  // 循环切换状态：☰(全部) → ○(未完成) → ✓(已完成)
+  const handleStatusCycle = () => {
+    const idx = statusCycle.findIndex((s) => s.value === filter)
+    setFilter(statusCycle[(idx + 1) % statusCycle.length].value)
+  }
+
+  const priorityCurrent = priorityCycle.find((p) => p.value === priorityFilter) ?? priorityCycle[0]
+  const statusCurrent = statusCycle.find((s) => s.value === filter) ?? statusCycle[0]
 
   const tagContainerMaxHeight =
     tagExpandLevel === 'full'
@@ -128,33 +218,29 @@ function FilterBar() {
             : 'absolute right-3 top-1.5 flex items-center gap-1'
         }
       >
-        <div className="relative shrink-0">
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value as Priority | 'all')}
-            aria-label="按优先级筛选"
-            title="按优先级筛选"
-            className="h-[26px] appearance-none rounded-md border border-slate-200 bg-white pl-2.5 pr-6 text-[11px] font-medium text-slate-500 outline-none transition-colors cursor-pointer hover:border-indigo-200 hover:bg-slate-50 hover:text-slate-700 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/20"
-          >
-            {priorityFilters.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <svg
-            className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </div>
+        {/* 优先级循环切换：信号条颜色即当前筛选态 */}
+        <button
+          type="button"
+          onClick={handlePriorityCycle}
+          title={`优先级：${priorityCurrent.label}（点击切换）`}
+          aria-label={`按优先级筛选，当前${priorityCurrent.label}，点击切换`}
+          aria-haspopup="true"
+          className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-slate-100"
+        >
+          <PriorityBarsIcon filter={priorityFilter} />
+        </button>
+
+        {/* 状态循环切换：◐ 全部 → ◔ 未完成 → ●✓ 已完成 */}
+        <button
+          type="button"
+          onClick={handleStatusCycle}
+          title={`状态：${statusCurrent.label}（点击切换）`}
+          aria-label={`按状态筛选，当前${statusCurrent.label}，点击切换`}
+          aria-haspopup="true"
+          className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-slate-100"
+        >
+          <StatusIcon filter={filter} />
+        </button>
 
         {showExpandControls && (
           <div className="flex items-center gap-1 shrink-0">

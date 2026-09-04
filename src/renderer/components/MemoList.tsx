@@ -15,7 +15,9 @@ function MemoList() {
   const filteredMemos = useMemo(() => {
     return memos.filter((memo) => {
       if (memo.deleted) return false
-      if (filter !== 'all' && memo.status !== filter) return false
+      if (filter === 'incomplete') {
+        if (memo.status === 'completed') return false
+      } else if (filter !== 'all' && memo.status !== filter) return false
       if (priorityFilter !== 'all' && memo.priority !== priorityFilter) return false
       if (tagFilter && !(memo.tags || []).includes(tagFilter)) return false
       return true

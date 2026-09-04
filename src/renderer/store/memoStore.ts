@@ -10,9 +10,12 @@ function getSavedTagSort(): TagSortMode {
   return 'latest'
 }
 
+// 状态筛选：'incomplete' = 未完成（含 pending 与 deferred）
+export type StatusFilter = MemoStatus | 'incomplete' | 'all'
+
 interface MemoState {
   memos: Memo[]
-  filter: MemoStatus | 'all'
+  filter: StatusFilter
   priorityFilter: Priority | 'all'
   tagFilter: string | null
   tagSort: TagSortMode
@@ -24,7 +27,7 @@ interface MemoState {
   updateMemo: (id: string, updates: Partial<Memo>) => Promise<void>
   deleteMemo: (id: string) => Promise<void>
   toggleStatus: (id: string) => void
-  setFilter: (filter: MemoStatus | 'all') => void
+  setFilter: (filter: StatusFilter) => void
   setPriorityFilter: (priority: Priority | 'all') => void
   setTagFilter: (tag: string | null) => void
   setTagSort: (mode: TagSortMode) => void
@@ -143,7 +146,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
     })
   },
 
-  setFilter: (filter: MemoStatus | 'all') => set({ filter }),
+  setFilter: (filter: StatusFilter) => set({ filter }),
 
   setPriorityFilter: (priority: Priority | 'all') => set({ priorityFilter: priority }),
 
