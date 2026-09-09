@@ -40,6 +40,10 @@ const priorityLabel: Record<Priority, string> = {
   high: '高', medium: '中', low: '低'
 }
 
+// 长内容默认收起为 4 行，展开状态记在模块级（虚拟列表滚动重挂载不丢失）
+const CONTENT_CLAMP_LINES = 4
+const expandedMemoIds = new Set<string>()
+
 type CopyState = 'idle' | 'copying' | 'success' | 'partial' | 'error'
 type ImageCopyState = 'idle' | 'copying' | 'success' | 'error'
 
@@ -79,6 +83,9 @@ function MemoItem({ memo }: MemoItemProps) {
   const [menuAbove, setMenuAbove] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>('idle')
+  const [isExpanded, setIsExpanded] = useState(() => expandedMemoIds.has(memo.id))
+  const [needsClamp, setNeedsClamp] = useState(false)
+  const contentRef = useRef<HTMLParagraphElement>(null)
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const priorityMenuRef = useRef<HTMLDivElement>(null)
@@ -136,6 +143,36 @@ function MemoItem({ memo }: MemoItemProps) {
   useLayoutEffect(() => {
     if (isEditing) adjustEditHeight()
   }, [isEditing, editContent])
+
+  // 内容超过 4 行时截断：clamp 下 scrollHeight 仍是完整内容高度，统一按行高判定
+  const measureClamp = () => {
+    const el = contentRef.current
+    if (!el) return
+    const lineHeight = parseFloat(window.getComputedStyle(el).lineHeight)
+    if (Number.isNaN(lineHeight)) return
+    setNeedsClamp(el.scrollHeight > lineHeight * CONTENT_CLAMP_LINES + 2)
+  }
+
+  useLayoutEffect(() => {
+    measureClamp()
+  }, [memoContent, isEditing])
+
+  // 窗口宽度变化会改变换行数，跟随元素尺寸重测
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => measureClamp())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const toggleExpanded = () => {
+    setIsExpanded(prev => {
+      if (prev) expandedMemoIds.delete(memo.id)
+      else expandedMemoIds.add(memo.id)
+      return !prev
+    })
+  }
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -421,14 +458,49 @@ function MemoItem({ memo }: MemoItemProps) {
               )}
             </div>
           ) : memoContent ? (
-            <p
-              className={`text-sm leading-relaxed break-words cursor-pointer whitespace-pre-wrap ${
-                memo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
-              }`}
-              onDoubleClick={startEditing}
-            >
-              {memoContent}
-            </p>
+            <div className="relative">
+              <p
+                ref={contentRef}
+                className={`text-sm leading-relaxed break-words cursor-pointer whitespace-pre-wrap ${
+                  memo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
+                } ${needsClamp && !isExpanded ? 'line-clamp-4' : ''}`}
+                onDoubleClick={startEditing}
+              >
+                {memoContent}
+              </p>
+              {needsClamp && !isExpanded && (
+                <div
+                  className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none"
+                  aria-hidden="true"
+                />
+              )}
+              {needsClamp && (
+                <button
+                  type="button"
+                  onClick={toggleExpanded}
+                  aria-expanded={isExpanded}
+                  className={
+                    isExpanded
+                      ? 'mt-1 flex items-center gap-0.5 text-[11px] text-indigo-500 hover:text-indigo-600 cursor-pointer'
+                      : 'absolute right-0 bottom-0 flex items-center gap-0.5 bg-white pl-2 text-[11px] text-indigo-500 hover:text-indigo-600 cursor-pointer'
+                  }
+                >
+                  {isExpanded ? '收起' : '展开'}
+                  <svg
+                    className="h-3 w-3"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {isExpanded ? <path d="M5 12l5-5 5 5" /> : <path d="M5 8l5 5 5-5" />}
+                  </svg>
+                </button>
+              )}
+            </div>
           ) : null}
 
           {/* 图片附件 */}
@@ -439,6 +511,7 @@ function MemoItem({ memo }: MemoItemProps) {
                   key={filename}
                   filename={filename}
                   onPreview={() => { setPreviewImageIndex(index); setShowImagePreview(true) }}
+                  onEdit={!memoContent ? startEditing : undefined}
                 />
               ))}
             </div>
@@ -667,19 +740,39 @@ async function copyImageFromEvent(
   }, 1500)
 }
 
-function ImageThumbnail({ filename, onPreview }: { filename: string; onPreview: () => void }) {
+function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onPreview: () => void; onEdit?: () => void }) {
   const [imageCopyState, setImageCopyState] = useState<ImageCopyState>('idle')
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const singleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (imageCopyTimerRef.current) clearTimeout(imageCopyTimerRef.current)
+      if (singleClickTimerRef.current) clearTimeout(singleClickTimerRef.current)
     }
   }, [])
 
   const handleOpenExternal = async () => {
     const opened = await window.electronAPI.image.openExternal(filename)
     if (!opened) onPreview()
+  }
+
+  // 可编辑（纯图片条目）时区分单击/双击：单击延迟 250ms 看图，双击直接进编辑
+  const handleImageClick = () => {
+    if (!onEdit) {
+      void handleOpenExternal()
+      return
+    }
+    if (singleClickTimerRef.current) {
+      clearTimeout(singleClickTimerRef.current)
+      singleClickTimerRef.current = null
+      onEdit()
+    } else {
+      singleClickTimerRef.current = setTimeout(() => {
+        singleClickTimerRef.current = null
+        void handleOpenExternal()
+      }, 250)
+    }
   }
 
   const copyTitle = getImageCopyTitle(imageCopyState)
@@ -696,7 +789,8 @@ function ImageThumbnail({ filename, onPreview }: { filename: string; onPreview: 
         src={thumbImageUrl(filename)}
         alt=""
         className="max-h-16 rounded-lg cursor-pointer hover:opacity-85 transition-opacity object-cover"
-        onClick={handleOpenExternal}
+        onClick={handleImageClick}
+        title={onEdit ? '双击编辑，单击系统看图' : undefined}
       />
       <div className="absolute -top-1 -right-1 flex flex-col gap-1">
         <button
