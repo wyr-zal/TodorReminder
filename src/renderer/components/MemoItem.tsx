@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Memo, MemoStatus, Priority } from '../../shared/types'
 import { formatMemoText, insertTextAtSelection } from '../../shared/memoClipboard'
 import { useMemoStore } from '../store/memoStore'
@@ -80,7 +81,7 @@ function MemoItem({ memo }: MemoItemProps) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
-  const [menuAbove, setMenuAbove] = useState(false)
+  const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; right: number } | null>(null)
   const [pendingDelete, setPendingDelete] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>('idle')
   const [isExpanded, setIsExpanded] = useState(() => expandedMemoIds.has(memo.id))
@@ -89,6 +90,7 @@ function MemoItem({ memo }: MemoItemProps) {
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const priorityMenuRef = useRef<HTMLDivElement>(null)
+  const priorityPopRef = useRef<HTMLDivElement>(null)
   const priorityBtnRef = useRef<HTMLButtonElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const editTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -175,13 +177,24 @@ function MemoItem({ memo }: MemoItemProps) {
   }
 
   useEffect(() => {
+    if (!showPriorityMenu) return
+    // 菜单已 portal 到 body，需同时排除按钮区与菜单本身，否则 mousedown 会先关掉菜单导致选不中
     const handleClickOutside = (e: MouseEvent) => {
-      if (priorityMenuRef.current && !priorityMenuRef.current.contains(e.target as Node)) {
-        setShowPriorityMenu(false)
-      }
+      const target = e.target as Node
+      const insideBtn = priorityMenuRef.current?.contains(target)
+      const insidePop = priorityPopRef.current?.contains(target)
+      if (!insideBtn && !insidePop) setShowPriorityMenu(false)
     }
-    if (showPriorityMenu) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    // fixed 菜单不随列表滚动，滚动/缩放时直接关闭避免错位（capture 捕获内层滚动容器）
+    const close = () => setShowPriorityMenu(false)
+    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
   }, [showPriorityMenu])
 
   const handlePriorityChange = (p: Priority) => {
@@ -192,7 +205,14 @@ function MemoItem({ memo }: MemoItemProps) {
   const handlePriorityClick = () => {
     if (!showPriorityMenu && priorityBtnRef.current) {
       const rect = priorityBtnRef.current.getBoundingClientRect()
-      setMenuAbove(window.innerHeight - rect.bottom < 120)
+      const MENU_HEIGHT = 110
+      const right = window.innerWidth - rect.right
+      // 下方空间不足则向上弹出，菜单右缘对齐按钮右缘
+      setMenuStyle(
+        window.innerHeight - rect.bottom < MENU_HEIGHT
+          ? { right, bottom: window.innerHeight - rect.top + 4 }
+          : { right, top: rect.bottom + 4 }
+      )
     }
     setShowPriorityMenu(!showPriorityMenu)
   }
@@ -603,8 +623,12 @@ function MemoItem({ memo }: MemoItemProps) {
                   </svg>
                 </button>
 
-                {showPriorityMenu && (
-                  <div className={`absolute right-0 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-20 min-w-[72px] ${menuAbove ? 'bottom-6' : 'top-6'}`}>
+                {showPriorityMenu && menuStyle && createPortal(
+                  <div
+                    ref={priorityPopRef}
+                    style={{ position: 'fixed', ...menuStyle }}
+                    className="bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 min-w-[72px]"
+                  >
                     {(['high', 'medium', 'low'] as Priority[]).map((p) => (
                       <button
                         key={p}
@@ -622,7 +646,8 @@ function MemoItem({ memo }: MemoItemProps) {
                         )}
                       </button>
                     ))}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
 
