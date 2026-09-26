@@ -1,7 +1,7 @@
 // 共享类型定义
 
-export type Priority = 'high' | 'medium' | 'low'
-export type MemoStatus = 'pending' | 'completed' | 'deferred'
+export type Priority = 'important' | 'unimportant'
+export type MemoStatus = 'not_started' | 'in_progress' | 'completed'
 export type MemoType = 'text' | 'image'
 
 export interface Memo {

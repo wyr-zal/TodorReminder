@@ -8,41 +8,36 @@ const TAGS_LINE_HEIGHT = 26
 const TAGS_COLLAPSED_MAX_HEIGHT = TAGS_LINE_HEIGHT
 const TAGS_PREVIEW_MAX_HEIGHT = TAGS_LINE_HEIGHT * 3
 
-// 优先级循环切换：点击依次切换，信号条颜色即当前筛选态
+// 重要等级循环切换：信号条颜色即当前筛选态
 const priorityCycle: { value: Priority | 'all'; label: string }[] = [
   { value: 'all', label: '全部' },
-  { value: 'high', label: '高优先' },
-  { value: 'medium', label: '中优先' },
-  { value: 'low', label: '低优先' }
+  { value: 'important', label: '重要' },
+  { value: 'unimportant', label: '不重要' }
 ]
 
-// 状态循环切换：◐ 全部 → ◔ 未完成（含延后） → ●✓ 已完成
+// 状态循环切换：全部 → 未开始 → 进行中 → 已完成
 const statusCycle = [
   { value: 'all', label: '全部' },
-  { value: 'incomplete', label: '未完成（含延后）' },
+  { value: 'not_started', label: '未开始' },
+  { value: 'in_progress', label: '进行中' },
   { value: 'completed', label: '已完成' }
 ] as const
 
-// 优先级信号条：三根高度递增的圆角竖条，全部态三色各一，筛选态单色
+// 单个方格用颜色表示重要等级筛选状态
 function PriorityBarsIcon({ filter }: { filter: Priority | 'all' }) {
-  const bars =
-    filter === 'high'
-      ? ['fill-rose-500', 'fill-rose-500', 'fill-rose-500']
-      : filter === 'medium'
-        ? ['fill-amber-500', 'fill-amber-500', 'fill-amber-500']
-        : filter === 'low'
-          ? ['fill-emerald-500', 'fill-emerald-500', 'fill-emerald-500']
-          : ['fill-rose-500', 'fill-amber-500', 'fill-emerald-500']
+  const color = filter === 'important'
+    ? 'fill-red-500'
+    : filter === 'unimportant'
+      ? 'fill-green-500'
+      : 'fill-slate-400'
   return (
     <svg className="h-4 w-4" viewBox="0 0 14 14" aria-hidden="true">
-      <rect x="1" y="9" width="2.6" height="4" rx="1.3" className={bars[0]} />
-      <rect x="5.7" y="5" width="2.6" height="8" rx="1.3" className={bars[1]} />
-      <rect x="10.4" y="1" width="2.6" height="12" rx="1.3" className={bars[2]} />
+      <rect x="2" y="2" width="10" height="10" rx="2.5" className={color} />
     </svg>
   )
 }
 
-// 状态圆环家族：◐ 半填充圆（全部）/ ◔ 缺口进度环（未完成）/ ●✓ 实心圆白勾（已完成）
+// 状态图标：空心（全部/未开始）/ 播放（进行中）/ 勾选（已完成）
 function StatusIcon({ filter }: { filter: StatusFilter }) {
   if (filter === 'completed') {
     return (
@@ -59,18 +54,18 @@ function StatusIcon({ filter }: { filter: StatusFilter }) {
       </svg>
     )
   }
-  if (filter === 'incomplete') {
+  if (filter === 'in_progress') {
+    return (
+      <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" className="fill-current" />
+        <path d="M6.5 4.8 11 8l-4.5 3.2z" className="fill-white" />
+      </svg>
+    )
+  }
+  if (filter === 'not_started') {
     return (
       <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <circle
-          cx="8"
-          cy="8"
-          r="6"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="28.27 37.7"
-        />
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" />
       </svg>
     )
   }
@@ -138,13 +133,13 @@ function FilterBar() {
     }
   }
 
-  // 循环切换优先级：灰(全部) → 红 → 橙 → 绿 → 灰
+  // 循环切换重要等级：全部 → 重要 → 不重要
   const handlePriorityCycle = () => {
     const idx = priorityCycle.findIndex((p) => p.value === priorityFilter)
     setPriorityFilter(priorityCycle[(idx + 1) % priorityCycle.length].value)
   }
 
-  // 循环切换状态：☰(全部) → ○(未完成) → ✓(已完成)
+  // 循环切换状态：全部 → 未开始 → 进行中 → 已完成
   const handleStatusCycle = () => {
     const idx = statusCycle.findIndex((s) => s.value === filter)
     setFilter(statusCycle[(idx + 1) % statusCycle.length].value)
@@ -218,19 +213,19 @@ function FilterBar() {
             : 'absolute right-3 top-1.5 flex items-center gap-1'
         }
       >
-        {/* 优先级循环切换：信号条颜色即当前筛选态 */}
+        {/* 重要等级循环切换 */}
         <button
           type="button"
           onClick={handlePriorityCycle}
-          title={`优先级：${priorityCurrent.label}（点击切换）`}
-          aria-label={`按优先级筛选，当前${priorityCurrent.label}，点击切换`}
+          title={`重要等级：${priorityCurrent.label}（点击切换）`}
+          aria-label={`按重要等级筛选，当前${priorityCurrent.label}，点击切换`}
           aria-haspopup="true"
           className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-slate-100"
         >
           <PriorityBarsIcon filter={priorityFilter} />
         </button>
 
-        {/* 状态循环切换：◐ 全部 → ◔ 未完成 → ●✓ 已完成 */}
+        {/* 状态循环切换：全部 → 未开始 → 进行中 → 已完成 */}
         <button
           type="button"
           onClick={handleStatusCycle}

@@ -25,8 +25,6 @@ export interface TextInsertionResult {
   caret: number
 }
 
-const priorities: Priority[] = ['high', 'medium', 'low']
-
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -122,11 +120,16 @@ function encodePayload(payload: MemoClipboardPayloadV1): string {
 
 function decodePayload(value: string): MemoClipboardPayloadV1 | null {
   try {
-    const parsed = JSON.parse(decodeURIComponent(value)) as Partial<MemoClipboardPayloadV1>
+    const parsed = JSON.parse(decodeURIComponent(value)) as Omit<Partial<MemoClipboardPayloadV1>, 'priority'> & { priority?: string }
+    const priority: Priority | null = parsed.priority === 'important' || parsed.priority === 'high'
+      ? 'important'
+      : parsed.priority === 'unimportant' || parsed.priority === 'medium' || parsed.priority === 'low'
+        ? 'unimportant'
+        : null
     if (
       parsed.version !== 1
       || typeof parsed.content !== 'string'
-      || !priorities.includes(parsed.priority as Priority)
+      || !priority
       || !Array.isArray(parsed.tags)
       || parsed.tags.some((tag) => typeof tag !== 'string')
       || typeof parsed.imageCount !== 'number'
@@ -138,7 +141,7 @@ function decodePayload(value: string): MemoClipboardPayloadV1 | null {
 
     return createMemoClipboardPayload(
       parsed.content,
-      parsed.priority as Priority,
+      priority,
       parsed.tags as string[],
       parsed.imageCount
     )

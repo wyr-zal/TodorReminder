@@ -15,9 +15,7 @@ function MemoList() {
   const filteredMemos = useMemo(() => {
     return memos.filter((memo) => {
       if (memo.deleted) return false
-      if (filter === 'incomplete') {
-        if (memo.status === 'completed') return false
-      } else if (filter !== 'all' && memo.status !== filter) return false
+      if (filter !== 'all' && memo.status !== filter) return false
       if (priorityFilter !== 'all' && memo.priority !== priorityFilter) return false
       if (tagFilter && !(memo.tags || []).includes(tagFilter)) return false
       return true
@@ -36,8 +34,8 @@ function MemoList() {
         if (completedTimeDiff !== 0) return completedTimeDiff
         return b.createdAt.localeCompare(a.createdAt)
       }
-      // 未完成记录按优先级 + 创建时间排序
-      const priorityOrder = { high: 0, medium: 1, low: 2 }
+      // 未完成记录按重要等级 + 创建时间排序
+      const priorityOrder = { important: 0, unimportant: 1 }
       if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
         return priorityOrder[a.priority] - priorityOrder[b.priority]
       }

@@ -15,9 +15,8 @@ interface MemoInputProps {
 }
 
 const priorityConfig: Record<Priority, { label: string; barClass: string; textClass: string }> = {
-  high:   { label: '高优先', barClass: 'priority-bar-high',   textClass: 'text-rose-500' },
-  medium: { label: '中优先', barClass: 'priority-bar-medium', textClass: 'text-amber-500' },
-  low:    { label: '低优先', barClass: 'priority-bar-low',    textClass: 'text-emerald-500' }
+  important:   { label: '重要', barClass: 'priority-bar-important', textClass: 'text-red-500' },
+  unimportant: { label: '不重要', barClass: 'priority-bar-unimportant', textClass: 'text-green-500' }
 }
 
 function parseTagsFromContent(text: string): { content: string; tags: string[] } {
@@ -33,7 +32,7 @@ function parseTagsFromContent(text: string): { content: string; tags: string[] }
 
 function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
   const [content, setContent] = useState('')
-  const [priority, setPriority] = useState<Priority>('medium')
+  const [priority, setPriority] = useState<Priority>('unimportant')
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const { addMemo, addImageMemo } = useMemoStore()
 
@@ -125,9 +124,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
   }
 
   const cyclePriority = () => {
-    const priorities: Priority[] = ['high', 'medium', 'low']
-    const currentIndex = priorities.indexOf(priority)
-    setPriority(priorities[(currentIndex + 1) % 3])
+    setPriority(priority === 'important' ? 'unimportant' : 'important')
   }
 
   const removePendingImage = (filename: string) => {
@@ -171,7 +168,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
         <button
           onClick={cyclePriority}
           className="flex-shrink-0 flex flex-col items-center justify-start pt-2 cursor-pointer group"
-          title={`优先级: ${cfg.label}（Tab 切换）`}
+          title={`重要等级：${cfg.label}（Tab 切换）`}
         >
           <div className={`w-1 h-6 rounded-full ${cfg.barClass} transition-all duration-200 group-hover:h-7`} />
         </button>
@@ -186,7 +183,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
           }}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={pendingImages.length > 0 ? '添加说明… Enter 保存' : '记录想法… Tab 切换优先级'}
+          placeholder={pendingImages.length > 0 ? '添加说明… Enter 保存' : '记录想法… Tab 切换重要等级'}
           className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all resize-none font-inter w-full"
           style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
         />

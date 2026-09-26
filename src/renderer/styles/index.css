@@ -156,9 +156,8 @@ html.dark .focus\:bg-white:focus { background-color: #1e293b; }
 }
 
 /* 优先级色彩 */
-.priority-bar-high   { background: #f43f5e; }
-.priority-bar-medium { background: #f59e0b; }
-.priority-bar-low    { background: #10b981; }
+.priority-bar-important   { background: #ef4444; }
+.priority-bar-unimportant { background: #22c55e; }
 
 /* 卡片入场动画 */
 @keyframes card-in {

@@ -10,8 +10,7 @@ function getSavedTagSort(): TagSortMode {
   return 'latest'
 }
 
-// 状态筛选：'incomplete' = 未完成（含 pending 与 deferred）
-export type StatusFilter = MemoStatus | 'incomplete' | 'all'
+export type StatusFilter = MemoStatus | 'all'
 
 interface MemoState {
   memos: Memo[]
@@ -53,14 +52,14 @@ export const useMemoStore = create<MemoState>((set, get) => ({
     }
   },
 
-  addMemo: async (content: string, priority: Priority = 'medium', tags: string[] = []) => {
+  addMemo: async (content: string, priority: Priority = 'unimportant', tags: string[] = []) => {
     const now = new Date().toISOString()
     const newMemo: Memo = {
       id: uuidv4(),
       content,
       type: 'text',
       priority,
-      status: 'pending',
+      status: 'not_started',
       attachments: [],
       tags,
       createdAt: now,
@@ -85,7 +84,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       content,
       type: 'image',
       priority,
-      status: 'pending',
+      status: 'not_started',
       attachments: imageFilenames,
       tags,
       createdAt: now,
@@ -135,9 +134,9 @@ export const useMemoStore = create<MemoState>((set, get) => ({
     const memo = get().memos.find((m) => m.id === id)
     if (!memo) return
     const nextStatus: Record<MemoStatus, MemoStatus> = {
-      pending: 'completed',
-      completed: 'deferred',
-      deferred: 'pending'
+      not_started: 'in_progress',
+      in_progress: 'completed',
+      completed: 'not_started'
     }
     const status = nextStatus[memo.status]
     get().updateMemo(id, {

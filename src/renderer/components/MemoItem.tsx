@@ -26,19 +26,17 @@ function parseTagsFromContent(text: string): { content: string; tags: string[] }
 }
 
 const priorityBar: Record<Priority, string> = {
-  high:   'priority-bar-high',
-  medium: 'priority-bar-medium',
-  low:    'priority-bar-low'
+  important: 'priority-bar-important',
+  unimportant: 'priority-bar-unimportant'
 }
 
 const priorityText: Record<Priority, string> = {
-  high:   'text-rose-500',
-  medium: 'text-amber-500',
-  low:    'text-emerald-500'
+  important: 'text-red-500',
+  unimportant: 'text-green-500'
 }
 
 const priorityLabel: Record<Priority, string> = {
-  high: '高', medium: '中', low: '低'
+  important: '重要', unimportant: '不重要'
 }
 
 // 长内容默认收起为 4 行，展开状态记在模块级（虚拟列表滚动重挂载不丢失）
@@ -58,12 +56,11 @@ function StatusIcon({ status }: { status: MemoStatus }) {
       </div>
     )
   }
-  if (status === 'deferred') {
+  if (status === 'in_progress') {
     return (
-      <div className="w-5 h-5 rounded-full border-2 border-amber-400 bg-amber-50 flex items-center justify-center">
-        <svg className="w-2.5 h-2.5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-          <rect x="6" y="5" width="4" height="14" rx="1" />
-          <rect x="14" y="5" width="4" height="14" rx="1" />
+      <div className="w-5 h-5 rounded-full border-2 border-indigo-400 bg-indigo-50 flex items-center justify-center">
+        <svg className="w-2.5 h-2.5 text-indigo-500" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
         </svg>
       </div>
     )
@@ -407,7 +404,11 @@ function MemoItem({ memo }: MemoItemProps) {
         <button
           onClick={() => toggleStatus(memo.id)}
           className="flex-shrink-0 mt-0.5 cursor-pointer"
-          title="切换状态"
+          title={memo.status === 'not_started'
+            ? '未开始（点击开始）'
+            : memo.status === 'in_progress'
+              ? '进行中（点击完成）'
+              : '已完成（点击重置为未开始）'}
         >
           <StatusIcon status={memo.status} />
         </button>
@@ -613,8 +614,8 @@ function MemoItem({ memo }: MemoItemProps) {
                   ref={priorityBtnRef}
                   onClick={handlePriorityClick}
                   className={`p-1.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer ${priorityText[memo.priority]}`}
-                  aria-label="修改优先级"
-                  title="修改优先级"
+                  aria-label="修改重要等级"
+                  title="修改重要等级"
                 >
                   <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16">
                     <rect x="2" y="2" width="3" height="12" rx="1" />
@@ -629,7 +630,7 @@ function MemoItem({ memo }: MemoItemProps) {
                     style={{ position: 'fixed', ...menuStyle }}
                     className="bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 min-w-[72px]"
                   >
-                    {(['high', 'medium', 'low'] as Priority[]).map((p) => (
+                    {(['important', 'unimportant'] as Priority[]).map((p) => (
                       <button
                         key={p}
                         onClick={() => handlePriorityChange(p)}

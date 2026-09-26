@@ -22,7 +22,7 @@ const image = (index: number) => ({
 test('clipboard metadata round-trips Chinese, newlines and escaped HTML safely', () => {
   const payload = createMemoClipboardPayload(
     '第一行 <重点> & "引号"\n第二行 \\ {测试}',
-    'high',
+    'important',
     ['工作', '工作', '明天'],
     1
   )
@@ -36,7 +36,7 @@ test('clipboard metadata round-trips Chinese, newlines and escaped HTML safely',
     payload: {
       version: 1,
       content: '第一行 <重点> & "引号"\n第二行 \\ {测试}',
-      priority: 'high',
+      priority: 'important',
       tags: ['工作', '明天'],
       imageCount: 1
     },
@@ -50,7 +50,7 @@ test('clipboard metadata round-trips Chinese, newlines and escaped HTML safely',
 test('clipboard protocol preserves zero, one and three image order', () => {
   for (const count of [0, 1, 3]) {
     const images = Array.from({ length: count }, (_, index) => image(index))
-    const payload = createMemoClipboardPayload('多图测试', 'medium', [], count)
+    const payload = createMemoClipboardPayload('多图测试', 'unimportant', [], count)
     const parsed = parseMemoClipboardHtml(buildMemoClipboardFormats(payload, images).html)
 
     assert.deepEqual(parsed?.images, images.map((item) => item.dataUrl))
@@ -130,7 +130,7 @@ test('invalid or unrelated HTML is ignored', () => {
 })
 
 test('metadata remains readable when an external HTML pipeline strips comments', () => {
-  const payload = createMemoClipboardPayload('保留元数据', 'low', ['兼容'], 1)
+  const payload = createMemoClipboardPayload('保留元数据', 'unimportant', ['兼容'], 1)
   const html = buildMemoClipboardFormats(payload, [image(0)]).html
   const withoutComments = html.replace(/<!--[^]*?-->/g, '')
 
@@ -138,4 +138,12 @@ test('metadata remains readable when an external HTML pipeline strips comments',
     payload,
     images: [image(0).dataUrl]
   })
+})
+
+test('legacy clipboard priority maps to the two-level importance model', () => {
+  const payload = createMemoClipboardPayload('旧数据', 'important', [], 0)
+  const html = buildMemoClipboardFormats(payload, []).html
+    .replace('"priority":"important"', '"priority":"high"')
+
+  assert.equal(parseMemoClipboardHtml(html)?.payload.priority, 'important')
 })

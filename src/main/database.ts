@@ -15,8 +15,8 @@ export function initDatabase(): void {
       id TEXT PRIMARY KEY,
       content TEXT NOT NULL,
       type TEXT DEFAULT 'text',
-      priority TEXT DEFAULT 'medium',
-      status TEXT DEFAULT 'pending',
+      priority TEXT DEFAULT 'unimportant',
+      status TEXT DEFAULT 'not_started',
       attachments TEXT DEFAULT '[]',
       tags TEXT DEFAULT '[]',
       createdAt TEXT NOT NULL,
@@ -46,6 +46,24 @@ export function initDatabase(): void {
     WHERE status = 'completed' AND completedAt IS NULL
   `)
 
+  // 迁移：二档重要等级与三档任务进度
+  db.exec(`
+    UPDATE memos
+    SET priority = CASE
+      WHEN priority = 'high' THEN 'important'
+      WHEN priority IN ('medium', 'low') THEN 'unimportant'
+      ELSE priority
+    END
+    WHERE priority IN ('high', 'medium', 'low');
+
+    UPDATE memos
+    SET status = CASE
+      WHEN status IN ('pending', 'deferred') THEN 'not_started'
+      ELSE status
+    END
+    WHERE status IN ('pending', 'deferred');
+  `)
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_memos_status ON memos(status);
@@ -62,9 +80,8 @@ export function getAllMemos(): Memo[] {
     WHERE deleted = 0
     ORDER BY
       CASE priority
-        WHEN 'high' THEN 1
-        WHEN 'medium' THEN 2
-        WHEN 'low' THEN 3
+        WHEN 'important' THEN 1
+        WHEN 'unimportant' THEN 2
       END,
       createdAt DESC
   `).all() as any[]
@@ -219,7 +236,19 @@ export function importFromJSON(data: { memos: Memo[] }): void {
   `)
 
   const transaction = db.transaction((memos: Memo[]) => {
-    for (const memo of memos) {
+    for (const sourceMemo of memos) {
+      const legacyMemo = sourceMemo as unknown as { priority: string; status: string }
+      const memo: Memo = {
+        ...sourceMemo,
+        priority: legacyMemo.priority === 'high' || legacyMemo.priority === 'important'
+          ? 'important'
+          : 'unimportant',
+        status: legacyMemo.status === 'completed'
+          ? 'completed'
+          : legacyMemo.status === 'in_progress' || legacyMemo.status === 'not_started'
+            ? legacyMemo.status
+            : 'not_started'
+      }
       const completedAt = memo.status === 'completed'
         ? memo.completedAt ?? memo.updatedAt
         : null

@@ -4,7 +4,7 @@ interface Memo {
   id: string
   content: string
   type: 'text' | 'image'
-  priority: 'high' | 'medium' | 'low'
+  priority: 'important' | 'unimportant'
   updatedAt: string
   attachments: string[]
 }
@@ -52,9 +52,8 @@ function TrashBin({ onClose, onRestored }: TrashBinProps) {
   }
 
   const priorityColors = {
-    high: 'border-l-red-500',
-    medium: 'border-l-yellow-500',
-    low: 'border-l-green-500'
+    important: 'border-l-red-500',
+    unimportant: 'border-l-green-500'
   }
 
   return (
