@@ -77,6 +77,7 @@ export interface AppSettings {
   imageCompression: boolean  // 是否压缩图片
   imageMaxSize: number       // 最大尺寸 KB
   imageMaxWidth: number      // 最大宽度 px
+  snipastePath?: string      // 本机 Snipaste 安装路径
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -104,6 +105,7 @@ export const IPC_CHANNELS = {
   MEMO_DELETE: 'memo:delete',
   CLIPBOARD_COPY_MEMO: 'clipboard:copy-memo',
   CLIPBOARD_COPY_MEMO_FOR_CLI: 'clipboard:copy-memo-for-cli',
+  IMAGE_PREVIEW: 'image:preview',
 
   // 同步操作
   SYNC_START: 'sync:start',

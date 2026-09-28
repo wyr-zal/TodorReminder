@@ -140,7 +140,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
   }
 
   const openPendingImage = (filename: string) => {
-    window.electronAPI.image.openExternal(filename)
+    return window.electronAPI.image.preview(filename)
   }
 
   const cfg = priorityConfig[priority]
@@ -208,12 +208,25 @@ function PendingImagePreview({
   onRemove
 }: {
   filename: string
-  onOpen: () => void
+  onOpen: () => Promise<boolean>
   onRemove: () => void
 }) {
+  const previewPendingRef = useRef(false)
   const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyTitle = getImageCopyTitle(copyFeedback)
+
+  const handlePreview = async () => {
+    if (previewPendingRef.current) return
+    previewPendingRef.current = true
+    try {
+      await onOpen()
+    } catch (error) {
+      console.error('Failed to request image preview:', error)
+    } finally {
+      previewPendingRef.current = false
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -233,7 +246,8 @@ function PendingImagePreview({
         src={thumbImageUrl(filename)}
         alt=""
         className="max-h-11 rounded-md object-cover cursor-pointer hover:opacity-85 transition-opacity"
-        onClick={onOpen}
+        onClick={handlePreview}
+        title="预览"
       />
       <div className="absolute -top-1.5 -right-1.5 flex flex-col gap-1">
         <button

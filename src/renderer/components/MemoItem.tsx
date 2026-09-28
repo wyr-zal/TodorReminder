@@ -8,7 +8,7 @@ import {
   restoreTextareaSelection,
   saveClipboardImages
 } from '../utils/memoPaste'
-import { thumbImageUrl, fullImageUrl } from '../utils/imageUrl'
+import { thumbImageUrl } from '../utils/imageUrl'
 import {
   IDLE_IMAGE_COPY,
   ImageCopyFeedback,
@@ -81,8 +81,6 @@ function MemoItem({ memo }: MemoItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(memoContent)
   const [editAttachments, setEditAttachments] = useState<string[]>(memo.attachments || [])
-  const [showImagePreview, setShowImagePreview] = useState(false)
-  const [previewImageIndex, setPreviewImageIndex] = useState(0)
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
   const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; right: number } | null>(null)
   const [pendingDelete, setPendingDelete] = useState(false)
@@ -541,11 +539,10 @@ function MemoItem({ memo }: MemoItemProps) {
           {/* 图片附件 */}
           {!isEditing && hasImage && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {memo.attachments.map((filename, index) => (
+              {memo.attachments.map((filename) => (
                 <ImageThumbnail
                   key={filename}
                   filename={filename}
-                  onPreview={() => { setPreviewImageIndex(index); setShowImagePreview(true) }}
                   onEdit={!memoContent ? startEditing : undefined}
                 />
               ))}
@@ -698,15 +695,6 @@ function MemoItem({ memo }: MemoItemProps) {
           <span className="sr-only" aria-live="polite">{copyState === 'idle' ? '' : copyLabel}</span>
         </div>
       </div>
-
-      {/* 图片大图预览 */}
-      {showImagePreview && hasImage && (
-        <ImageModal
-          attachments={memo.attachments}
-          initialIndex={previewImageIndex}
-          onClose={() => setShowImagePreview(false)}
-        />
-      )}
     </>
   )
 }
@@ -722,17 +710,9 @@ function PreviewInWindowIcon() {
   )
 }
 
-function SaveImageIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3v12" />
-      <path d="M7 10l5 5 5-5" />
-      <path d="M5 21h14" />
-    </svg>
-  )
-}
-
-function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onPreview: () => void; onEdit?: () => void }) {
+function ImageThumbnail({ filename, onEdit }: { filename: string; onEdit?: () => void }) {
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const previewPendingRef = useRef(false)
   const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const singleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -744,15 +724,25 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
     }
   }, [])
 
-  const handleOpenExternal = async () => {
-    const opened = await window.electronAPI.image.openExternal(filename)
-    if (!opened) onPreview()
+  const handlePreview = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation()
+    if (previewPendingRef.current) return
+    previewPendingRef.current = true
+    setIsPreviewing(true)
+    try {
+      await window.electronAPI.image.preview(filename)
+    } catch (error) {
+      console.error('Failed to request image preview:', error)
+    } finally {
+      previewPendingRef.current = false
+      setIsPreviewing(false)
+    }
   }
 
   // 可编辑（纯图片条目）时区分单击/双击：单击延迟 250ms 看图，双击直接进编辑
   const handleImageClick = () => {
     if (!onEdit) {
-      void handleOpenExternal()
+      void handlePreview()
       return
     }
     if (singleClickTimerRef.current) {
@@ -762,7 +752,7 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
     } else {
       singleClickTimerRef.current = setTimeout(() => {
         singleClickTimerRef.current = null
-        void handleOpenExternal()
+        void handlePreview()
       }, 250)
     }
   }
@@ -782,18 +772,16 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
         alt=""
         className="max-h-16 rounded-lg cursor-pointer hover:opacity-85 transition-opacity object-cover"
         onClick={handleImageClick}
-        title={onEdit ? '单击看图，双击编辑' : undefined}
+        title={onEdit ? '单击预览，双击编辑' : '预览'}
       />
       <div className="absolute -top-1 -right-1 flex flex-col gap-1">
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onPreview()
-          }}
+          onClick={handlePreview}
+          disabled={isPreviewing}
           aria-label="预览"
           title="预览"
-          className={`${actionClass} bg-white text-slate-600 hover:text-indigo-600 hover:bg-white`}
+          className={`${actionClass} bg-white text-slate-600 hover:text-indigo-600 hover:bg-white disabled:cursor-wait`}
         >
           <PreviewInWindowIcon />
         </button>
@@ -849,131 +837,6 @@ function EditImagePreview({ filename, onRemove }: { filename: string; onRemove: 
           className="w-4 h-4 bg-slate-700 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer"
         >
           <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round">
-            <path d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function ImageModal({ attachments, initialIndex, onClose }: { attachments: string[]; initialIndex: number; onClose: () => void }) {
-  const [currentIndex, setCurrentIndex] = useState(initialIndex)
-  const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
-  const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const currentFilename = attachments[currentIndex]
-  const hasMultiple = attachments.length > 1
-
-  useEffect(() => {
-    setCopyFeedback(IDLE_IMAGE_COPY)
-  }, [currentFilename])
-
-  useEffect(() => {
-    return () => {
-      if (imageCopyTimerRef.current) clearTimeout(imageCopyTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') setCurrentIndex(prev => prev > 0 ? prev - 1 : attachments.length - 1)
-      else if (e.key === 'ArrowRight') setCurrentIndex(prev => prev < attachments.length - 1 ? prev + 1 : 0)
-      else if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [attachments.length, onClose])
-
-  const handleSave = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    await window.electronAPI.image.saveToFile(currentFilename)
-  }
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    await copyImageFromEvent(currentFilename, e, setCopyFeedback, imageCopyTimerRef)
-  }
-
-  const handlePrev = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setCurrentIndex(prev => prev > 0 ? prev - 1 : attachments.length - 1)
-  }
-
-  const handleNext = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setCurrentIndex(prev => prev < attachments.length - 1 ? prev + 1 : 0)
-  }
-
-  return (
-    <div
-      data-modal
-      className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div className="relative max-w-[90%] max-h-[90%]" onClick={e => e.stopPropagation()}>
-        <img src={fullImageUrl(currentFilename)} alt="" className="max-w-full max-h-full rounded-xl shadow-2xl" />
-
-        {hasMultiple && (
-          <button
-            onClick={handlePrev}
-            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-12 w-9 h-9 bg-white/90 rounded-full shadow-lg flex items-center justify-center text-slate-700 hover:bg-white transition-colors cursor-pointer"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        )}
-
-        {hasMultiple && (
-          <button
-            onClick={handleNext}
-            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-12 w-9 h-9 bg-white/90 rounded-full shadow-lg flex items-center justify-center text-slate-700 hover:bg-white transition-colors cursor-pointer"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        )}
-
-        {hasMultiple && (
-          <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/50 text-white text-xs rounded-full tracking-wider">
-            {currentIndex + 1} / {attachments.length}
-          </div>
-        )}
-
-        <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={copyFeedback.state === 'copying'}
-            aria-label={getImageCopyTitle(copyFeedback)}
-            title={getImageCopyTitle(copyFeedback)}
-            className={`w-8 h-8 rounded-full shadow-lg flex items-center justify-center transition-colors active:scale-95 cursor-pointer disabled:cursor-wait ${
-              copyFeedback.state === 'success'
-                ? 'bg-emerald-500 text-white'
-                : copyFeedback.state === 'error'
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-white/90 text-slate-600 hover:text-indigo-600 hover:bg-white'
-            }`}
-          >
-            <ImageCopyIcon state={copyFeedback.state} kind={copyFeedback.kind} />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            aria-label="保存"
-            title="保存"
-            className="w-8 h-8 rounded-full bg-white/90 text-slate-600 shadow-lg flex items-center justify-center hover:text-indigo-600 hover:bg-white transition-colors active:scale-95 cursor-pointer"
-          >
-            <SaveImageIcon />
-          </button>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="absolute -top-3 -right-3 w-7 h-7 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round">
             <path d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>

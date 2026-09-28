@@ -86,6 +86,7 @@ const electronAPI = {
 
   // 图片操作
   image: {
+    preview: (filename: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_PREVIEW, filename) as Promise<boolean>,
     save: (base64: string) => ipcRenderer.invoke('image:save', base64) as Promise<string>,
     get: (filename: string) => ipcRenderer.invoke('image:get', filename) as Promise<string | null>,
     delete: (filename: string) => ipcRenderer.invoke('image:delete', filename) as Promise<boolean>,

@@ -26,6 +26,7 @@ import { loadSyncConfig, saveSyncConfig, getSyncStatus, sync } from './sync'
 import { saveImage, getImageBase64, getImageBuffer, getExistingImagePath, deleteImage, exportImage, ensureThumbnail } from './image'
 import { constrainWindowBounds, loadWindowState, saveWindowState } from './window-state'
 import { migrateStorageData, resolveStorageInfo } from './storage'
+import { createSnipastePreview, preserveSnipastePath } from './snipaste'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -1054,11 +1055,52 @@ function setupIPC() {
   })
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, settings: AppSettings) => {
-    saveSettings(settings)
+    saveSettings(preserveSnipastePath(loadSettings(), settings))
     return true
   })
 
   // 图片操作
+  const previewWithSnipaste = createSnipastePreview({
+    readPath: () => loadSettings().snipastePath,
+    savePath: (snipastePath) => saveSettings({ ...loadSettings(), snipastePath }),
+    choosePath: async () => {
+      const options: Electron.OpenDialogOptions = {
+        title: '选择 Snipaste',
+        properties: ['openFile'],
+        filters: [{ name: 'Snipaste', extensions: ['exe'] }]
+      }
+      const result = mainWindow && !mainWindow.isDestroyed()
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options)
+      return result.canceled ? null : result.filePaths[0] || null
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.IMAGE_PREVIEW, async (_, filename: string) => {
+    try {
+      const imagePath = getExistingImagePath(filename)
+      if (!imagePath) throw new Error('图片不存在')
+      return await previewWithSnipaste.preview(imagePath)
+    } catch (error) {
+      console.error('Failed to preview image with Snipaste:', error)
+      const options: Electron.MessageBoxOptions = {
+        type: 'error',
+        title: '预览',
+        message: error instanceof Error ? error.message : '预览失败',
+        buttons: ['确定']
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        await dialog.showMessageBox(mainWindow, options)
+      } else {
+        await dialog.showMessageBox(options)
+      }
+      return false
+    }
+  })
+
+  // 后台预热 Snipaste 就绪状态（PowerShell 探测约 1 秒），延后到窗口起来之后，免得拖慢启动。
+  setTimeout(() => { void previewWithSnipaste.prewarm() }, 1500)
+
   ipcMain.handle('image:save', async (_, base64: string) => {
     const settings = loadSettings()
     // 移除 data URL 前缀
