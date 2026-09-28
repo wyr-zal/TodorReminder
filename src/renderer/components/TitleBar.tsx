@@ -14,15 +14,15 @@ function TitleBar() {
 
   return (
     <>
-      <div className="drag-region flex items-center justify-between px-3 py-2 bg-[#1e1e2e] rounded-t-[11px]">
+      <div className="drag-region flex h-9 shrink-0 items-center justify-between rounded-t-[11px] border-b border-slate-200 bg-[#fafafa] px-3 dark:bg-[#0f172a]">
         {/* 品牌区域 */}
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="w-4 h-4 text-indigo-500 dark:text-indigo-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="1" width="10" height="13" rx="1.5" />
             <path d="M5 5h6M5 8h6M5 11h4" />
-            <path d="M12 4l2 2-4 4-2-1 1-2 3-3z" fill="currentColor" stroke="none" className="text-indigo-400" />
+            <path d="M12 4l2 2-4 4-2-1 1-2 3-3z" fill="currentColor" stroke="none" className="text-indigo-500 dark:text-indigo-400" />
           </svg>
-          <span className="text-[13px] font-medium text-white/80 tracking-tight select-none">专注备忘</span>
+          <span className="text-[13px] font-medium text-slate-700 tracking-tight select-none">专注备忘</span>
         </div>
 
         {/* 工具按钮组 */}
@@ -30,7 +30,7 @@ function TitleBar() {
           {/* 回收站 */}
           <button
             onClick={() => setShowTrashBin(true)}
-            className="p-1.5 rounded-md text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             title="回收站"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -44,7 +44,7 @@ function TitleBar() {
           {/* 设置 */}
           <button
             onClick={() => setShowSyncSettings(true)}
-            className="p-1.5 rounded-md text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             title="同步设置"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -56,8 +56,8 @@ function TitleBar() {
           {/* 置顶 */}
           <button
             onClick={togglePin}
-            className={`p-1.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer ${
-              isPinned ? 'text-indigo-400' : 'text-white/40 hover:text-white/80'
+            className={`p-1.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer ${
+              isPinned ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-700'
             }`}
             title={isPinned ? '取消置顶' : '始终置顶'}
           >
@@ -69,7 +69,7 @@ function TitleBar() {
           {/* 隐藏到托盘 */}
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-md text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             title="隐藏到托盘"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round">
