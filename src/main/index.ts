@@ -1106,7 +1106,8 @@ function setupIPC() {
         return false
       }
 
-      clipboard.writeText(imagePath)
+      // 路径加引号，便于直接粘贴到 CLI / 终端
+      clipboard.writeText(`"${imagePath}"`)
       return true
     } catch (error) {
       console.error('Failed to copy image path:', error)

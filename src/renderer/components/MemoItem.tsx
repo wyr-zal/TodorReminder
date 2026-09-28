@@ -9,6 +9,13 @@ import {
   saveClipboardImages
 } from '../utils/memoPaste'
 import { thumbImageUrl, fullImageUrl } from '../utils/imageUrl'
+import {
+  IDLE_IMAGE_COPY,
+  ImageCopyFeedback,
+  ImageCopyIcon,
+  copyImageFromEvent,
+  getImageCopyTitle
+} from '../utils/imageCopy'
 
 interface MemoItemProps {
   memo: Memo
@@ -44,7 +51,6 @@ const CONTENT_CLAMP_LINES = 4
 const expandedMemoIds = new Set<string>()
 
 type CopyState = 'idle' | 'copying' | 'success' | 'partial' | 'error'
-type ImageCopyState = 'idle' | 'copying' | 'success' | 'error'
 
 function StatusIcon({ status }: { status: MemoStatus }) {
   if (status === 'completed') {
@@ -81,6 +87,7 @@ function MemoItem({ memo }: MemoItemProps) {
   const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; right: number } | null>(null)
   const [pendingDelete, setPendingDelete] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>('idle')
+  const [copyKind, setCopyKind] = useState<'cli' | 'rich'>('cli')
   const [isExpanded, setIsExpanded] = useState(() => expandedMemoIds.has(memo.id))
   const [needsClamp, setNeedsClamp] = useState(false)
   const contentRef = useRef<HTMLParagraphElement>(null)
@@ -199,10 +206,15 @@ function MemoItem({ memo }: MemoItemProps) {
     setShowPriorityMenu(false)
   }
 
+  const handleSetNotStarted = () => {
+    updateMemo(memo.id, { status: 'not_started', completedAt: null })
+    setShowPriorityMenu(false)
+  }
+
   const handlePriorityClick = () => {
     if (!showPriorityMenu && priorityBtnRef.current) {
       const rect = priorityBtnRef.current.getBoundingClientRect()
-      const MENU_HEIGHT = 110
+      const MENU_HEIGHT = 150
       const right = window.innerWidth - rect.right
       // 下方空间不足则向上弹出，菜单右缘对齐按钮右缘
       setMenuStyle(
@@ -303,7 +315,9 @@ function MemoItem({ memo }: MemoItemProps) {
 
   const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
     if (copyState === 'copying') return
-    const copyForCli = event.shiftKey
+    // 默认复制纯文本与图片路径（便于直接喂 CLI），Shift 复制富文本与图片
+    const copyRich = event.shiftKey
+    setCopyKind(copyRich ? 'rich' : 'cli')
 
     if (copyTimerRef.current) {
       clearTimeout(copyTimerRef.current)
@@ -318,9 +332,9 @@ function MemoItem({ memo }: MemoItemProps) {
         tags: memo.tags || [],
         attachments: memo.attachments || []
       }
-      const result = copyForCli
-        ? await window.electronAPI.clipboard.copyMemoForCli(request)
-        : await window.electronAPI.clipboard.copyMemo(request)
+      const result = copyRich
+        ? await window.electronAPI.clipboard.copyMemo(request)
+        : await window.electronAPI.clipboard.copyMemoForCli(request)
 
       if (!result.success) {
         setCopyState('error')
@@ -371,15 +385,15 @@ function MemoItem({ memo }: MemoItemProps) {
   // 虚拟列表滚动时条目会重新挂载，入场动画只给新建的备忘播放
   const isFreshMemo = Date.now() - new Date(memo.createdAt).getTime() < 1500
   const copyLabel = copyState === 'copying'
-    ? '正在复制待办'
+    ? '复制中'
     : copyState === 'success'
-      ? '待办已复制'
+      ? (copyKind === 'rich' ? '已复制富文本图片' : '已复制文本路径')
       : copyState === 'partial'
-        ? '待办已复制，部分图片不可用'
+        ? '已复制（部分图片缺失）'
         : copyState === 'error'
-          ? '复制待办失败'
-          : '复制整条待办'
-  const copyTitle = `${copyLabel}；Shift 点击复制图片路径给 CLI`
+          ? '复制失败'
+          : '复制整条待办｜Shift 富文本'
+  const copyTitle = copyLabel
   const copyButtonClass = copyState === 'success'
     ? 'text-emerald-500 bg-emerald-50'
     : copyState === 'partial'
@@ -405,10 +419,10 @@ function MemoItem({ memo }: MemoItemProps) {
           onClick={() => toggleStatus(memo.id)}
           className="flex-shrink-0 mt-0.5 cursor-pointer"
           title={memo.status === 'not_started'
-            ? '未开始（点击开始）'
+            ? '未开始'
             : memo.status === 'in_progress'
-              ? '进行中（点击完成）'
-              : '已完成（点击重置为未开始）'}
+              ? '进行中'
+              : '已完成'}
         >
           <StatusIcon status={memo.status} />
         </button>
@@ -614,8 +628,8 @@ function MemoItem({ memo }: MemoItemProps) {
                   ref={priorityBtnRef}
                   onClick={handlePriorityClick}
                   className={`p-1.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer ${priorityText[memo.priority]}`}
-                  aria-label="修改重要等级"
-                  title="修改重要等级"
+                  aria-label="进度与重要等级"
+                  title="进度与重要等级"
                 >
                   <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16">
                     <rect x="2" y="2" width="3" height="12" rx="1" />
@@ -628,8 +642,23 @@ function MemoItem({ memo }: MemoItemProps) {
                   <div
                     ref={priorityPopRef}
                     style={{ position: 'fixed', ...menuStyle }}
-                    className="bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 min-w-[72px]"
+                    className="bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 min-w-[104px]"
                   >
+                    <button
+                      onClick={handleSetNotStarted}
+                      className={`w-full px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 flex items-center gap-2 cursor-pointer ${
+                        memo.status === 'not_started' ? 'bg-slate-50' : ''
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full border border-slate-400" />
+                      <span className="text-slate-600">未开始</span>
+                      {memo.status === 'not_started' && (
+                        <svg className="w-3 h-3 text-indigo-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="my-1 border-t border-slate-100" />
                     {(['important', 'unimportant'] as Priority[]).map((p) => (
                       <button
                         key={p}
@@ -682,31 +711,6 @@ function MemoItem({ memo }: MemoItemProps) {
   )
 }
 
-function ImageCopyIcon({ state }: { state: ImageCopyState }) {
-  if (state === 'success') {
-    return (
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M5 13l4 4L19 7" />
-      </svg>
-    )
-  }
-
-  if (state === 'error') {
-    return (
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-        <path d="M6 6l12 12M18 6L6 18" />
-      </svg>
-    )
-  }
-
-  return (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="8" y="8" width="11" height="11" rx="2" />
-      <path d="M16 8V5a2 2 0 00-2-2H5a2 2 0 00-2 2v9a2 2 0 002 2h3" />
-    </svg>
-  )
-}
-
 function PreviewInWindowIcon() {
   return (
     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -728,46 +732,8 @@ function SaveImageIcon() {
   )
 }
 
-function getImageCopyTitle(state: ImageCopyState): string {
-  if (state === 'copying') return '正在复制图片'
-  if (state === 'success') return '图片已复制'
-  if (state === 'error') return '复制图片失败'
-  return '复制图片；Shift 点击复制图片路径给 CLI'
-}
-
-async function copyImageFromEvent(
-  filename: string,
-  event: React.MouseEvent,
-  setState: (state: ImageCopyState) => void,
-  timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
-) {
-  event.stopPropagation()
-
-  if (timerRef.current) {
-    clearTimeout(timerRef.current)
-    timerRef.current = null
-  }
-
-  setState('copying')
-
-  try {
-    const success = event.shiftKey
-      ? await window.electronAPI.image.copyPath(filename)
-      : await window.electronAPI.image.copy(filename)
-    setState(success ? 'success' : 'error')
-  } catch (error) {
-    console.error('Failed to copy image:', error)
-    setState('error')
-  }
-
-  timerRef.current = setTimeout(() => {
-    setState('idle')
-    timerRef.current = null
-  }, 1500)
-}
-
 function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onPreview: () => void; onEdit?: () => void }) {
-  const [imageCopyState, setImageCopyState] = useState<ImageCopyState>('idle')
+  const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const singleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -801,10 +767,10 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
     }
   }
 
-  const copyTitle = getImageCopyTitle(imageCopyState)
-  const copyClass = imageCopyState === 'success'
+  const copyTitle = getImageCopyTitle(copyFeedback)
+  const copyClass = copyFeedback.state === 'success'
     ? 'bg-emerald-500 text-white opacity-100'
-    : imageCopyState === 'error'
+    : copyFeedback.state === 'error'
       ? 'bg-rose-500 text-white opacity-100'
       : 'bg-slate-900/70 text-white opacity-0 group-hover/img:opacity-100 hover:bg-indigo-500'
   const actionClass = 'w-6 h-6 rounded-full shadow-md flex items-center justify-center transition-all active:scale-95 cursor-pointer opacity-0 group-hover/img:opacity-100'
@@ -816,7 +782,7 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
         alt=""
         className="max-h-16 rounded-lg cursor-pointer hover:opacity-85 transition-opacity object-cover"
         onClick={handleImageClick}
-        title={onEdit ? '双击编辑，单击系统看图' : undefined}
+        title={onEdit ? '单击看图，双击编辑' : undefined}
       />
       <div className="absolute -top-1 -right-1 flex flex-col gap-1">
         <button
@@ -825,21 +791,21 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
             event.stopPropagation()
             onPreview()
           }}
-          aria-label="在窗口内预览图片"
-          title="在窗口内预览图片"
+          aria-label="预览"
+          title="预览"
           className={`${actionClass} bg-white text-slate-600 hover:text-indigo-600 hover:bg-white`}
         >
           <PreviewInWindowIcon />
         </button>
         <button
           type="button"
-          onClick={(event) => copyImageFromEvent(filename, event, setImageCopyState, imageCopyTimerRef)}
-          disabled={imageCopyState === 'copying'}
+          onClick={(event) => copyImageFromEvent(filename, event, setCopyFeedback, imageCopyTimerRef)}
+          disabled={copyFeedback.state === 'copying'}
           aria-label={copyTitle}
           title={copyTitle}
           className={`${actionClass} disabled:cursor-wait ${copyClass}`}
         >
-          <ImageCopyIcon state={imageCopyState} />
+          <ImageCopyIcon state={copyFeedback.state} kind={copyFeedback.kind} />
         </button>
       </div>
     </div>
@@ -847,31 +813,59 @@ function ImageThumbnail({ filename, onPreview, onEdit }: { filename: string; onP
 }
 
 function EditImagePreview({ filename, onRemove }: { filename: string; onRemove: () => void }) {
+  const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
+  const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (imageCopyTimerRef.current) clearTimeout(imageCopyTimerRef.current)
+    }
+  }, [])
+
+  const copyTitle = getImageCopyTitle(copyFeedback)
+  const copyClass = copyFeedback.state === 'success'
+    ? 'bg-emerald-500 text-white opacity-100'
+    : copyFeedback.state === 'error'
+      ? 'bg-rose-500 text-white opacity-100'
+      : 'bg-slate-900/70 text-white opacity-0 group-hover/img:opacity-100 hover:bg-indigo-500'
+
   return (
     <div className="relative group/img">
       <img src={thumbImageUrl(filename)} alt="" className="w-12 h-12 object-cover rounded-lg" />
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute -top-1 -right-1 w-4 h-4 bg-slate-700 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer"
-      >
-        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round">
-          <path d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+      <div className="absolute -top-1 -right-1 flex flex-col gap-0.5">
+        <button
+          type="button"
+          onClick={(event) => copyImageFromEvent(filename, event, setCopyFeedback, imageCopyTimerRef)}
+          disabled={copyFeedback.state === 'copying'}
+          aria-label={copyTitle}
+          title={copyTitle}
+          className={`w-4 h-4 rounded-full shadow-md flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:cursor-wait ${copyClass}`}
+        >
+          <ImageCopyIcon state={copyFeedback.state} kind={copyFeedback.kind} iconClassName="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="w-4 h-4 bg-slate-700 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer"
+        >
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }
 
 function ImageModal({ attachments, initialIndex, onClose }: { attachments: string[]; initialIndex: number; onClose: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
-  const [imageCopyState, setImageCopyState] = useState<ImageCopyState>('idle')
+  const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
   const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentFilename = attachments[currentIndex]
   const hasMultiple = attachments.length > 1
 
   useEffect(() => {
-    setImageCopyState('idle')
+    setCopyFeedback(IDLE_IMAGE_COPY)
   }, [currentFilename])
 
   useEffect(() => {
@@ -896,7 +890,7 @@ function ImageModal({ attachments, initialIndex, onClose }: { attachments: strin
   }
 
   const handleCopy = async (e: React.MouseEvent) => {
-    await copyImageFromEvent(currentFilename, e, setImageCopyState, imageCopyTimerRef)
+    await copyImageFromEvent(currentFilename, e, setCopyFeedback, imageCopyTimerRef)
   }
 
   const handlePrev = (e: React.MouseEvent) => {
@@ -950,25 +944,25 @@ function ImageModal({ attachments, initialIndex, onClose }: { attachments: strin
           <button
             type="button"
             onClick={handleCopy}
-            disabled={imageCopyState === 'copying'}
-            aria-label={getImageCopyTitle(imageCopyState)}
-            title={getImageCopyTitle(imageCopyState)}
+            disabled={copyFeedback.state === 'copying'}
+            aria-label={getImageCopyTitle(copyFeedback)}
+            title={getImageCopyTitle(copyFeedback)}
             className={`w-8 h-8 rounded-full shadow-lg flex items-center justify-center transition-colors active:scale-95 cursor-pointer disabled:cursor-wait ${
-              imageCopyState === 'success'
+              copyFeedback.state === 'success'
                 ? 'bg-emerald-500 text-white'
-                : imageCopyState === 'error'
+                : copyFeedback.state === 'error'
                   ? 'bg-rose-500 text-white'
                   : 'bg-white/90 text-slate-600 hover:text-indigo-600 hover:bg-white'
             }`}
           >
-            <ImageCopyIcon state={imageCopyState} />
+            <ImageCopyIcon state={copyFeedback.state} kind={copyFeedback.kind} />
           </button>
 
           <button
             type="button"
             onClick={handleSave}
-            aria-label="保存图片"
-            title="保存图片"
+            aria-label="保存"
+            title="保存"
             className="w-8 h-8 rounded-full bg-white/90 text-slate-600 shadow-lg flex items-center justify-center hover:text-indigo-600 hover:bg-white transition-colors active:scale-95 cursor-pointer"
           >
             <SaveImageIcon />

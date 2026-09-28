@@ -86,8 +86,8 @@ test('CLI text includes memo text, tags and ordered Windows image paths', () => 
       '第一行\n第二行',
       '#工作 #截图',
       '图片路径:',
-      'C:\\Users\\12704\\AppData\\Roaming\\focus-memo\\attachments\\a.png',
-      'C:\\Users\\12704\\AppData\\Roaming\\focus-memo\\attachments\\b.png'
+      '"C:\\Users\\12704\\AppData\\Roaming\\focus-memo\\attachments\\a.png"',
+      '"C:\\Users\\12704\\AppData\\Roaming\\focus-memo\\attachments\\b.png"'
     ].join('\n').replace('#工作 #截图\n图片路径:', '#工作 #截图\n\n图片路径:')
   )
 })

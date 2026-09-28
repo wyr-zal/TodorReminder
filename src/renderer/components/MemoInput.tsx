@@ -8,6 +8,13 @@ import {
   saveClipboardImages
 } from '../utils/memoPaste'
 import { thumbImageUrl } from '../utils/imageUrl'
+import {
+  IDLE_IMAGE_COPY,
+  ImageCopyFeedback,
+  ImageCopyIcon,
+  copyImageFromEvent,
+  getImageCopyTitle
+} from '../utils/imageCopy'
 
 interface MemoInputProps {
   inputRef: RefObject<HTMLTextAreaElement>
@@ -144,21 +151,12 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
       {pendingImages.length > 0 && (
         <div className="mb-1.5 flex flex-wrap gap-1.5 flex-shrink-0">
           {pendingImages.map((filename) => (
-            <div key={filename} className="relative inline-block">
-              <ImagePreview
-                filename={filename}
-                className="max-h-11 rounded-md object-cover cursor-pointer hover:opacity-85 transition-opacity"
-                onClick={() => openPendingImage(filename)}
-              />
-              <button
-                onClick={() => removePendingImage(filename)}
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-slate-700 text-white rounded-full text-[10px] flex items-center justify-center hover:bg-slate-900 transition-colors cursor-pointer"
-              >
-                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+            <PendingImagePreview
+              key={filename}
+              filename={filename}
+              onOpen={() => openPendingImage(filename)}
+              onRemove={() => removePendingImage(filename)}
+            />
           ))}
         </div>
       )}
@@ -168,7 +166,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
         <button
           onClick={cyclePriority}
           className="flex-shrink-0 flex flex-col items-center justify-start pt-2 cursor-pointer group"
-          title={`重要等级：${cfg.label}（Tab 切换）`}
+          title={`重要等级：${cfg.label}`}
         >
           <div className={`w-1 h-6 rounded-full ${cfg.barClass} transition-all duration-200 group-hover:h-7`} />
         </button>
@@ -204,16 +202,64 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
   )
 }
 
-function ImagePreview({
+function PendingImagePreview({
   filename,
-  className,
-  onClick
+  onOpen,
+  onRemove
 }: {
   filename: string
-  className?: string
-  onClick?: () => void
+  onOpen: () => void
+  onRemove: () => void
 }) {
-  return <img src={thumbImageUrl(filename)} alt="" className={className} onClick={onClick} />
+  const [copyFeedback, setCopyFeedback] = useState<ImageCopyFeedback>(IDLE_IMAGE_COPY)
+  const imageCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copyTitle = getImageCopyTitle(copyFeedback)
+
+  useEffect(() => {
+    return () => {
+      if (imageCopyTimerRef.current) clearTimeout(imageCopyTimerRef.current)
+    }
+  }, [])
+
+  const copyClass = copyFeedback.state === 'success'
+    ? 'bg-emerald-500 text-white opacity-100'
+    : copyFeedback.state === 'error'
+      ? 'bg-rose-500 text-white opacity-100'
+      : 'bg-slate-900/70 text-white opacity-0 group-hover/img:opacity-100 hover:bg-indigo-500'
+
+  return (
+    <div className="relative inline-block group/img">
+      <img
+        src={thumbImageUrl(filename)}
+        alt=""
+        className="max-h-11 rounded-md object-cover cursor-pointer hover:opacity-85 transition-opacity"
+        onClick={onOpen}
+      />
+      <div className="absolute -top-1.5 -right-1.5 flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={(event) => copyImageFromEvent(filename, event, setCopyFeedback, imageCopyTimerRef)}
+          disabled={copyFeedback.state === 'copying'}
+          aria-label={copyTitle}
+          title={copyTitle}
+          className={`w-4 h-4 rounded-full shadow-md flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:cursor-wait ${copyClass}`}
+        >
+          <ImageCopyIcon state={copyFeedback.state} kind={copyFeedback.kind} iconClassName="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="删除"
+          title="删除"
+          className="w-4 h-4 bg-slate-700 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 hover:bg-slate-900 transition-opacity cursor-pointer"
+        >
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default MemoInput

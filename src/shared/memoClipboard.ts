@@ -213,7 +213,10 @@ export function buildMemoCliText(content: string, tags: string[], imagePaths: st
     return text
   }
 
-  return [text, ['图片路径:', ...validPaths].join('\n')].filter(Boolean).join('\n\n')
+  // 路径加引号，粘到 CLI / 终端时含空格的路径无需再补引号
+  const quotedPaths = validPaths.map((path) => `"${path}"`)
+
+  return [text, ['图片路径:', ...quotedPaths].join('\n')].filter(Boolean).join('\n\n')
 }
 
 export function parseMemoClipboardHtml(html: string): ParsedMemoClipboard | null {

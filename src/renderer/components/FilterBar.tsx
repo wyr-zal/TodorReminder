@@ -177,7 +177,7 @@ function FilterBar() {
               type="button"
               onClick={() => setTagFilter(null)}
               onDoubleClick={handleAllTagDoubleClick}
-              title="单击显示全部标签，双击展开标签列表"
+              title="单击显示全部，双击展开"
               className={`${tagButtonBase} ${
                 tagFilter === null
                   ? 'bg-violet-50 text-violet-600 border border-violet-200'
@@ -217,8 +217,8 @@ function FilterBar() {
         <button
           type="button"
           onClick={handlePriorityCycle}
-          title={`重要等级：${priorityCurrent.label}（点击切换）`}
-          aria-label={`按重要等级筛选，当前${priorityCurrent.label}，点击切换`}
+          title={`重要等级：${priorityCurrent.label}`}
+          aria-label={`重要等级筛选：${priorityCurrent.label}`}
           aria-haspopup="true"
           className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-slate-100"
         >
@@ -229,8 +229,8 @@ function FilterBar() {
         <button
           type="button"
           onClick={handleStatusCycle}
-          title={`状态：${statusCurrent.label}（点击切换）`}
-          aria-label={`按状态筛选，当前${statusCurrent.label}，点击切换`}
+          title={`状态：${statusCurrent.label}`}
+          aria-label={`状态筛选：${statusCurrent.label}`}
           aria-haspopup="true"
           className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-slate-100"
         >
