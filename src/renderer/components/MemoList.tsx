@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemoStore } from '../store/memoStore'
+import type { MemoStatus } from '../../shared/types'
 import MemoItem from './MemoItem'
 import FilterBar from './FilterBar'
+
+// 列表状态分档：进行中置顶，未开始次之，已完成沉底
+const STATUS_RANK: Record<MemoStatus, number> = { in_progress: 0, not_started: 1, completed: 2 }
 
 function MemoList() {
   const { memos, filter, priorityFilter, tagFilter } = useMemoStore()
@@ -24,17 +28,16 @@ function MemoList() {
 
   const sortedMemos = useMemo(() => {
     return [...filteredMemos].sort((a, b) => {
-      // 已完成的统一沉底
-      const aCompleted = a.status === 'completed' ? 1 : 0
-      const bCompleted = b.status === 'completed' ? 1 : 0
-      if (aCompleted !== bCompleted) return aCompleted - bCompleted
+      // 状态分档：进行中置顶，未开始次之，已完成沉底
+      const rankDiff = STATUS_RANK[a.status] - STATUS_RANK[b.status]
+      if (rankDiff !== 0) return rankDiff
       // 已完成记录按点击完成时间倒序，不再受优先级影响
-      if (a.status === 'completed' && b.status === 'completed') {
+      if (a.status === 'completed') {
         const completedTimeDiff = (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt)
         if (completedTimeDiff !== 0) return completedTimeDiff
         return b.createdAt.localeCompare(a.createdAt)
       }
-      // 未完成记录按重要等级 + 创建时间排序
+      // 进行中 / 未开始：重要在前，再按创建时间倒序
       const priorityOrder = { important: 0, unimportant: 1 }
       if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
         return priorityOrder[a.priority] - priorityOrder[b.priority]
