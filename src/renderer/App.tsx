@@ -25,7 +25,8 @@ function getSavedInputPanelHeight(): number {
 
 function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const { loadMemos } = useMemoStore()
+  const { loadMemos, memos } = useMemoStore()
+  const [focusedMemoId, setFocusedMemoId] = useState<string | null>(null)
   const [inputPanelHeight, setInputPanelHeight] = useState(getSavedInputPanelHeight)
 
   useEffect(() => {
@@ -48,6 +49,12 @@ function App() {
   }, [loadMemos])
 
   useEffect(() => {
+    if (focusedMemoId && !memos.some(memo => memo.id === focusedMemoId && !memo.deleted)) {
+      setFocusedMemoId(null)
+    }
+  }, [focusedMemoId, memos])
+
+  useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
       const isCtrlW = event.ctrlKey && event.key.toLowerCase() === 'w'
       const target = event.target instanceof HTMLElement ? event.target : null
@@ -62,12 +69,16 @@ function App() {
       if (event.defaultPrevented || event.isComposing || (event.key !== 'Escape' && !isCtrlW)) return
 
       event.preventDefault()
+      if (event.key === 'Escape' && focusedMemoId) {
+        setFocusedMemoId(null)
+        return
+      }
       void window.electronAPI.window.hide()
     }
 
     window.addEventListener('keydown', handleWindowKeyDown)
     return () => window.removeEventListener('keydown', handleWindowKeyDown)
-  }, [])
+  }, [focusedMemoId])
 
   const handleSnapToEdge = () => {
     window.electronAPI.window.snapToEdge()
@@ -102,30 +113,30 @@ function App() {
   }
 
   return (
-    <div className="window-shell">
+    <div className={`window-shell${focusedMemoId ? ' memo-focus-active' : ''}`}>
       <TitleBar />
 
       {/* 输入区域（高度可拖拽） */}
-      <div style={{ height: inputPanelHeight, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="memo-input-panel" style={{ height: inputPanelHeight, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
         <MemoInput inputRef={inputRef} textareaMaxHeight={inputPanelHeight - 28} />
       </div>
 
       {/* 拖拽分隔条 */}
       <div
         onMouseDown={handleResizeStart}
-        className="h-1.5 flex-shrink-0 bg-slate-100 hover:bg-indigo-100 flex items-center justify-center transition-colors group"
+        className="memo-input-divider h-1.5 flex-shrink-0 bg-slate-100 hover:bg-indigo-100 flex items-center justify-center transition-colors group"
         style={{ cursor: 'ns-resize' }}
         title="拖动调整输入区大小"
       >
         <div className="w-8 h-0.5 rounded-full bg-slate-300 group-hover:bg-indigo-400 transition-colors" />
       </div>
 
-      <MemoList />
+      <MemoList focusedMemoId={focusedMemoId} onFocusMemoChange={setFocusedMemoId} />
 
       {/* 吸附按钮 */}
       <button
         onClick={handleSnapToEdge}
-        className="absolute bottom-2 left-2 p-1 rounded-md text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer"
+        className="memo-snap-button absolute bottom-2 left-2 p-1 rounded-md text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer"
         title="吸附到边缘"
       >
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

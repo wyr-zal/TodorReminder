@@ -180,3 +180,32 @@ html.dark .focus\:bg-white:focus { background-color: #1e293b; }
     animation: none;
   }
 }
+
+/* 保留原布局和组件实例，只让选中待办占据标题栏下方的窗口空间。 */
+.memo-focus-active > .memo-input-panel,
+.memo-focus-active > .memo-input-divider,
+.memo-focus-active > .memo-snap-button,
+.memo-focus-active > .memo-list-shell {
+  visibility: hidden;
+}
+
+.memo-focus-card {
+  position: fixed;
+  inset: 36px 0 0;
+  z-index: 20;
+  visibility: visible;
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transition: none;
+}
+
+.memo-focus-card > .memo-state-actions,
+.memo-focus-card > .memo-item-actions {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+}

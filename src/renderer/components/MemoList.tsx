@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
 import { useMemoStore } from '../store/memoStore'
 import type { MemoStatus } from '../../shared/types'
 import MemoItem from './MemoItem'
@@ -8,13 +8,19 @@ import FilterBar from './FilterBar'
 // 列表状态分档：进行中置顶，未开始次之，已完成沉底
 const STATUS_RANK: Record<MemoStatus, number> = { in_progress: 0, not_started: 1, completed: 2 }
 
-function MemoList() {
+interface MemoListProps {
+  focusedMemoId: string | null
+  onFocusMemoChange: (id: string | null) => void
+}
+
+function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   const { memos, filter, priorityFilter, tagFilter } = useMemoStore()
   const listRef = useRef<HTMLDivElement>(null)
   const scrollStartAtRef = useRef<number | null>(null)
   const lastScrollTopRef = useRef(0)
   const hideTimerRef = useRef<number | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [focusSnapshot, setFocusSnapshot] = useState<{ ids: string[]; scrollTop: number } | null>(null)
 
   const filteredMemos = useMemo(() => {
     return memos.filter((memo) => {
@@ -47,12 +53,44 @@ function MemoList() {
   }, [filteredMemos])
 
 
+  // 保留行实例和顺序；展开期间只更新数据，避免编辑态随筛选/重排被卸载。
+  const displayedMemos = useMemo(() => {
+    if (!focusedMemoId || !focusSnapshot) return sortedMemos
+    const byId = new Map(memos.filter(memo => !memo.deleted).map(memo => [memo.id, memo]))
+    return focusSnapshot.ids.flatMap(id => {
+      const memo = byId.get(id)
+      return memo ? [memo] : []
+    })
+  }, [focusedMemoId, focusSnapshot, sortedMemos, memos])
+  const focusedIndex = displayedMemos.findIndex(memo => memo.id === focusedMemoId)
+  const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
+    const indexes = defaultRangeExtractor(range)
+    if (focusedIndex >= 0 && !indexes.includes(focusedIndex)) {
+      indexes.push(focusedIndex)
+      indexes.sort((a, b) => a - b)
+    }
+    return indexes
+  }, [focusedIndex])
+
+  const openFocus = (id: string) => {
+    setFocusSnapshot({ ids: sortedMemos.map(memo => memo.id), scrollTop: listRef.current?.scrollTop ?? 0 })
+    onFocusMemoChange(id)
+  }
+
+  useLayoutEffect(() => {
+    if (!focusedMemoId && focusSnapshot) {
+      if (listRef.current) listRef.current.scrollTop = focusSnapshot.scrollTop
+      setFocusSnapshot(null)
+    }
+  }, [focusedMemoId, focusSnapshot])
+
   const rowVirtualizer = useVirtualizer({
-    count: sortedMemos.length,
+    count: displayedMemos.length,
     getScrollElement: () => listRef.current,
     estimateSize: () => 96,
     overscan: 8,
-    getItemKey: (index) => sortedMemos[index].id
+    getItemKey: (index) => displayedMemos[index].id,
+    rangeExtractor
   })
 
   const clearHideTimer = () => {
@@ -123,12 +161,12 @@ function MemoList() {
   }, [])
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="memo-list-shell flex-1 flex flex-col overflow-hidden">
       <FilterBar />
 
       <div className="relative flex-1 min-h-0">
         <div ref={listRef} onScroll={handleScroll} className="h-full overflow-y-auto px-3 py-2.5">
-          {sortedMemos.length === 0 ? (
+          {displayedMemos.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 select-none">
               <svg className="w-10 h-10 text-slate-200" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="8" y="4" width="24" height="32" rx="3" />
@@ -147,9 +185,18 @@ function MemoList() {
                   data-index={virtualRow.index}
                   ref={rowVirtualizer.measureElement}
                   className="absolute top-0 left-0 w-full pb-1.5"
-                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  style={{
+                    transform: virtualRow.index === focusedIndex ? undefined : `translateY(${virtualRow.start}px)`,
+                    height: virtualRow.index === focusedIndex ? virtualRow.size : undefined
+                  }}
                 >
-                  <MemoItem memo={sortedMemos[virtualRow.index]} />
+                  <MemoItem
+                    memo={displayedMemos[virtualRow.index]}
+                    isFocused={virtualRow.index === focusedIndex}
+                    onToggleFocus={() => focusedMemoId
+                      ? onFocusMemoChange(null)
+                      : openFocus(displayedMemos[virtualRow.index].id)}
+                  />
                 </div>
               ))}
             </div>

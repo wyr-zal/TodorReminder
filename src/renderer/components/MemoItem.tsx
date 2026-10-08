@@ -19,6 +19,8 @@ import {
 
 interface MemoItemProps {
   memo: Memo
+  isFocused: boolean
+  onToggleFocus: () => void
 }
 
 function parseTagsFromContent(text: string): { content: string; tags: string[] } {
@@ -76,7 +78,7 @@ function StatusIcon({ status }: { status: MemoStatus }) {
   )
 }
 
-function MemoItem({ memo }: MemoItemProps) {
+function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
   const memoContent = memo.type === 'image' && memo.content === '图片备忘' ? '' : memo.content
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(memoContent)
@@ -146,7 +148,7 @@ function MemoItem({ memo }: MemoItemProps) {
 
   useLayoutEffect(() => {
     if (isEditing) adjustEditHeight()
-  }, [isEditing, editContent])
+  }, [isEditing, editContent, isFocused])
 
   // 内容超过 4 行时截断：clamp 下 scrollHeight 仍是完整内容高度，统一按行高判定
   const measureClamp = () => {
@@ -159,7 +161,7 @@ function MemoItem({ memo }: MemoItemProps) {
 
   useLayoutEffect(() => {
     measureClamp()
-  }, [memoContent, isEditing])
+  }, [memoContent, isEditing, isFocused])
 
   // 窗口宽度变化会改变换行数，跟随元素尺寸重测
   useEffect(() => {
@@ -403,8 +405,9 @@ function MemoItem({ memo }: MemoItemProps) {
   return (
     <>
       <div
+        data-memo-id={memo.id}
         className={`group relative flex gap-2.5 px-3 py-2.5 bg-white rounded-xl border border-slate-100 shadow-card hover:border-slate-200 hover:shadow-card-hover transition-all duration-200 ${
-          isFreshMemo ? 'animate-card-in' : ''
+          isFocused ? 'memo-focus-card' : isFreshMemo ? 'animate-card-in' : ''
         } ${
           memo.status === 'completed' ? 'opacity-55' : ''
         }`}
@@ -412,18 +415,34 @@ function MemoItem({ memo }: MemoItemProps) {
         {/* 左侧优先级竖条 */}
         <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priorityBar[memo.priority]}`} />
 
-        {/* 状态按钮 */}
-        <button
-          onClick={() => toggleStatus(memo.id)}
-          className="flex-shrink-0 mt-0.5 cursor-pointer"
-          title={memo.status === 'not_started'
-            ? '未开始'
-            : memo.status === 'in_progress'
-              ? '进行中'
-              : '已完成'}
-        >
-          <StatusIcon status={memo.status} />
-        </button>
+        {/* 左侧状态与窗口内展开入口 */}
+        <div className="memo-state-actions flex-shrink-0 flex flex-col items-center justify-center gap-2">
+          <button
+            onClick={() => toggleStatus(memo.id)}
+            className="flex-shrink-0 mt-0.5 cursor-pointer"
+            title={memo.status === 'not_started'
+              ? '未开始'
+              : memo.status === 'in_progress'
+                ? '进行中'
+                : '已完成'}
+          >
+            <StatusIcon status={memo.status} />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleFocus}
+            aria-label={isFocused ? '返回列表' : '全屏展开'}
+            aria-expanded={isFocused}
+            title={isFocused ? '返回列表' : '全屏展开'}
+            className="p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {isFocused
+                ? <path d="M19 12H5m7-7-7 7 7 7" />
+                : <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />}
+            </svg>
+          </button>
+        </div>
 
         {/* 内容区域 */}
         <div className="flex-1 min-w-0">
@@ -496,18 +515,18 @@ function MemoItem({ memo }: MemoItemProps) {
                 ref={contentRef}
                 className={`text-sm leading-relaxed break-words cursor-pointer whitespace-pre-wrap ${
                   memo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
-                } ${needsClamp && !isExpanded ? 'line-clamp-4' : ''}`}
+                } ${needsClamp && !isExpanded && !isFocused ? 'line-clamp-4' : ''}`}
                 onDoubleClick={startEditing}
               >
                 {memoContent}
               </p>
-              {needsClamp && !isExpanded && (
+              {needsClamp && !isExpanded && !isFocused && (
                 <div
                   className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none"
                   aria-hidden="true"
                 />
               )}
-              {needsClamp && (
+              {needsClamp && !isFocused && (
                 <button
                   type="button"
                   onClick={toggleExpanded}
@@ -570,7 +589,7 @@ function MemoItem({ memo }: MemoItemProps) {
         </div>
 
         {/* 右侧操作区（常驻显示） */}
-        <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
+        <div className="memo-item-actions flex-shrink-0 flex flex-col items-end gap-0.5">
           {pendingDelete ? (
             // 删除确认态
             <div className="flex flex-col gap-1 items-end">
