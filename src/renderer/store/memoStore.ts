@@ -23,7 +23,7 @@ interface MemoState {
   loadMemos: () => Promise<void>
   addMemo: (content: string, priority?: Priority, tags?: string[]) => Promise<void>
   addImageMemo: (content: string, priority: Priority, imageFilenames: string[], tags?: string[]) => Promise<void>
-  updateMemo: (id: string, updates: Partial<Memo>) => Promise<void>
+  updateMemo: (id: string, updates: Partial<Memo>, expected?: Memo) => Promise<boolean>
   deleteMemo: (id: string) => Promise<void>
   toggleStatus: (id: string) => void
   setFilter: (filter: StatusFilter) => void
@@ -102,7 +102,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
     }
   },
 
-  updateMemo: async (id: string, updates: Partial<Memo>) => {
+  updateMemo: async (id: string, updates: Partial<Memo>, expected?: Memo) => {
     const oldMemos = get().memos
     set((state) => ({
       memos: state.memos.map((memo) =>
@@ -112,10 +112,15 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       )
     }))
     try {
-      await window.electronAPI.memo.update(id, updates)
+      const saved = await window.electronAPI.memo.update(id, updates, expected)
+      if (!saved) throw new Error('待办不存在或已删除')
+      await get().loadMemos()
+      return true
     } catch (error) {
       console.error('Failed to update memo:', error)
-      set({ memos: oldMemos })
+      if (expected) await get().loadMemos()
+      else set({ memos: oldMemos })
+      return false
     }
   },
 

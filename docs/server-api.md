@@ -4,7 +4,7 @@
 
 - **Base URL**：`https://memo-api.cliproxy.com.cn`
 - **API 版本**：`v1`
-- **当前用途**：服务端部署在独立测试数据库 `focus_memo_server_test_20261010` 上，数据库中的待办为空。可用于 API 和客户端联调，不是生产数据服务。
+- **当前用途**：API 连接独立生产数据库。本文包含本地源码新增的增量变更接口；生产服务尚未应用 `002_incremental_sync.sql` 或部署该接口，因此新客户端需等服务端单独升级后才能启用增量拉取。API token 不应写入本文档、源码、日志或 Git。
 - **TLS**：HTTPS 证书和公网健康检查已验证。
 - **认证凭据**：API token 保存在服务器 root-only 环境文件中，不应写入本文档、源码、日志或 Git。
 
@@ -42,6 +42,7 @@ Idempotency-Key: <UUID>
 | `PATCH` | `/api/v1/memos/{id}` | 修改或恢复待办 | 需要 | 必须 |
 | `DELETE` | `/api/v1/memos/{id}` | 软删除或永久删除待办 | 需要 | 必须 |
 | `GET` | `/api/v1/sync/snapshot` | 获取全量同步快照 | 需要 | 不需要 |
+| `GET` | `/api/v1/sync/changes` | 按游标分页获取最新变更 | 需要 | 不需要 |
 | `POST` | `/api/v1/attachments` | 上传一张图片 | 需要 | 必须 |
 | `GET` | `/api/v1/attachments/{id}` | 下载图片 | 需要 | 不需要 |
 
@@ -187,7 +188,21 @@ Idempotency-Key: <新操作 UUID>
 GET /api/v1/sync/snapshot
 ```
 
-成功响应包含 `datasetId`、`schemaVersion`、`complete`、`totalRows`、`memos` 和 `attachments`。快照在同一只读事务中读取；客户端应确认 `complete` 为 `true` 后再将快照视为完整数据集。
+成功响应包含 `datasetId`、`schemaVersion`、`changeCursor`、`complete`、`totalRows`、`memos` 和 `attachments`。`changeCursor` 是该完整快照对应的服务端变更位置，首次 bootstrap 后用于开始增量拉取。快照在同一只读事务中读取；客户端应确认 `complete` 为 `true` 后再将快照视为完整数据集。
+
+### 拉取增量变更
+
+```http
+GET /api/v1/sync/changes?cursor=120&limit=10
+Authorization: Bearer <API_TOKEN>
+X-Focus-Dataset-ID: <datasetId>
+```
+
+`cursor` 是上次安全应用的服务端变更序号，必须是十进制字符串；`X-Focus-Dataset-ID` 必须与客户端已绑定的数据集一致。`limit` 范围为 `1`–`10`，默认 `10`。多页读取时，首次响应的 `highWater` 应通过 `through` 参数原样带到后续页面，直到 `hasMore` 为 `false`。
+
+响应包含数据集信息、`changes`、本页用到的 ready 附件描述、`cursor`、`highWater` 和 `hasMore`。每个 change 包含单调变更序号及该待办的当前状态；因此同一待办在两次同步之间多次修改时，只需应用最新状态。软删除和永久删除墓碑也会出现在变更页中。只有待办和所需附件均成功落地后，客户端才应保存响应 `cursor`；失败时用原游标重试。该接口支持最终一致，不承诺多个页面构成同一时刻的强一致快照。
+
+新客户端无游标时先使用完整快照 bootstrap；后续定时同步应使用变更页。全量快照仍供首次接入预览和确认使用。
 
 ### 上传图片
 
@@ -245,7 +260,7 @@ JSON 错误统一采用以下结构：
 
 ## 当前使用注意事项
 
-1. 当前服务连接的是独立测试库，不包含生产待办；不要把它当作正式数据的唯一存储。
+1. 服务当前连接独立生产数据库；原测试库及其他既有数据库/表保持分离。不要对生产库运行开发用清库或测试数据脚本。
 2. 客户端需要配置 Base URL 和 token 才能调用受保护接口；token 不应硬编码、提交 Git 或通过公开渠道传递。
-3. 使用真实数据前，先完成桌面端端到端联测、冲突与离线恢复测试，并完成尚未结束的独立代码复审。
-4. 当前 API 已通过公网 HTTPS 健康、未授权拒绝及有效 token 调用检查；这不等同于桌面端全流程已验收。
+3. 首次接入会先预览并备份本地数据。若有记录被服务端校验拒绝，应保留本地数据和 outbox，先处理拒绝原因再确认完整同步。
+4. 公网 HTTPS、健康检查、未授权拒绝及有效 token API 调用已验证；这不等同于所有桌面端数据均已完成同步。

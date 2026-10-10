@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
 import { useMemoStore } from '../store/memoStore'
-import type { MemoStatus } from '../../shared/types'
+import type { Memo, MemoStatus } from '../../shared/types'
 import MemoItem from './MemoItem'
 import FilterBar from './FilterBar'
 
@@ -21,6 +21,15 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   const hideTimerRef = useRef<number | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [focusSnapshot, setFocusSnapshot] = useState<{ ids: string[]; scrollTop: number } | null>(null)
+  const [editingMemos, setEditingMemos] = useState<Record<string, Memo>>({})
+  const handleEditingChange = useCallback((memo: Memo | null, id: string) => {
+    setEditingMemos(current => {
+      if (memo) return { ...current, [id]: memo }
+      const remaining = { ...current }
+      delete remaining[id]
+      return remaining
+    })
+  }, [])
 
   const filteredMemos = useMemo(() => {
     return memos.filter((memo) => {
@@ -53,8 +62,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   }, [filteredMemos])
 
 
-  // 保留行实例和顺序；展开期间只更新数据，避免编辑态随筛选/重排被卸载。
-  const displayedMemos = useMemo(() => {
+  const visibleMemos = useMemo(() => {
     if (!focusedMemoId || !focusSnapshot) return sortedMemos
     const byId = new Map(memos.filter(memo => !memo.deleted).map(memo => [memo.id, memo]))
     return focusSnapshot.ids.flatMap(id => {
@@ -62,15 +70,26 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
       return memo ? [memo] : []
     })
   }, [focusedMemoId, focusSnapshot, sortedMemos, memos])
+  const currentEditingMemos = useMemo(() => Object.values(editingMemos).map(editing => (
+    memos.find(memo => memo.id === editing.id) ?? editing
+  )), [editingMemos, memos])
+  const displayedMemos = useMemo(() => {
+    const visibleIds = new Set(visibleMemos.map(memo => memo.id))
+    return [...visibleMemos, ...currentEditingMemos.filter(memo => !visibleIds.has(memo.id))]
+  }, [currentEditingMemos, visibleMemos])
   const focusedIndex = displayedMemos.findIndex(memo => memo.id === focusedMemoId)
+  const editingIndexes = useMemo(() => currentEditingMemos.map(editing => displayedMemos.findIndex(memo => memo.id === editing.id)).filter(index => index >= 0), [currentEditingMemos, displayedMemos])
+  const editingOutsideFilter = currentEditingMemos.filter(editing => !sortedMemos.some(memo => memo.id === editing.id))
+  const editingOutsideIndex = editingOutsideFilter.length
+    ? displayedMemos.findIndex(memo => memo.id === editingOutsideFilter[editingOutsideFilter.length - 1].id)
+    : -1
   const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
     const indexes = defaultRangeExtractor(range)
-    if (focusedIndex >= 0 && !indexes.includes(focusedIndex)) {
-      indexes.push(focusedIndex)
-      indexes.sort((a, b) => a - b)
+    for (const index of [focusedIndex, ...editingIndexes]) {
+      if (index >= 0 && !indexes.includes(index)) indexes.push(index)
     }
-    return indexes
-  }, [focusedIndex])
+    return indexes.sort((a, b) => a - b)
+  }, [focusedIndex, editingIndexes])
 
   const openFocus = (id: string) => {
     setFocusSnapshot({ ids: sortedMemos.map(memo => memo.id), scrollTop: listRef.current?.scrollTop ?? 0 })
@@ -92,6 +111,10 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     getItemKey: (index) => displayedMemos[index].id,
     rangeExtractor
   })
+
+  useEffect(() => {
+    if (editingOutsideIndex >= 0) rowVirtualizer.scrollToIndex(editingOutsideIndex, { align: 'auto' })
+  }, [editingOutsideIndex])
 
   const clearHideTimer = () => {
     if (hideTimerRef.current !== null) {
@@ -196,6 +219,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
                     onToggleFocus={() => focusedMemoId
                       ? onFocusMemoChange(null)
                       : openFocus(displayedMemos[virtualRow.index].id)}
+                    onEditingChange={handleEditingChange}
                   />
                 </div>
               ))}

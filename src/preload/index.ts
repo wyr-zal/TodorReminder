@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { CloudConfigView, CloudPreview, CloudStatus } from '../shared/cloudTypes'
 import {
   IPC_CHANNELS,
   Memo,
@@ -32,8 +33,8 @@ const electronAPI = {
   memo: {
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.MEMO_GET_ALL) as Promise<Memo[]>,
     add: (memo: Memo) => ipcRenderer.invoke(IPC_CHANNELS.MEMO_ADD, memo) as Promise<Memo>,
-    update: (id: string, updates: Partial<Memo>) =>
-      ipcRenderer.invoke(IPC_CHANNELS.MEMO_UPDATE, { id, updates }) as Promise<Memo>,
+    update: (id: string, updates: Partial<Memo>, expected?: Memo) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MEMO_UPDATE, { id, updates, expected }) as Promise<Memo | null>,
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.MEMO_DELETE, id) as Promise<boolean>,
     export: () => ipcRenderer.invoke('memo:export'),
     // 回收站
@@ -53,14 +54,17 @@ const electronAPI = {
   sync: {
     start: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_START),
     startBackground: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_START_BACKGROUND),
-    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_STATUS),
-    setConfig: (config: { token: string; repo: string }) =>
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_STATUS) as Promise<CloudStatus>,
+    setConfig: (config: { token: string; url: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.SYNC_CONFIG, config),
-    getConfig: () => ipcRenderer.invoke('sync:get-config'),
-    onComplete: (callback: (result: { success: boolean; error?: string }) => void) => {
-      const handler = (_: unknown, result: { success: boolean; error?: string }) => callback(result)
+    getConfig: () => ipcRenderer.invoke('sync:get-config') as Promise<CloudConfigView>,
+    preview: () => ipcRenderer.invoke('sync:preview') as Promise<CloudPreview>,
+    confirm: (ticket: string) => ipcRenderer.invoke('sync:confirm', ticket) as Promise<void>,
+    online: () => ipcRenderer.send('sync:online'),
+    onComplete: (callback: (result: { success: boolean; changed?: boolean; error?: string }) => void) => {
+      const handler = (_: unknown, result: { success: boolean; changed?: boolean; error?: string }) => callback(result)
       ipcRenderer.on(IPC_CHANNELS.SYNC_COMPLETE, handler)
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.SYNC_COMPLETE, handler)
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.SYNC_COMPLETE, handler) }
     }
   },
 

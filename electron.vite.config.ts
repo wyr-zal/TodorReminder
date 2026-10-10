@@ -9,9 +9,13 @@ export default defineConfig({
       outDir: 'dist/main',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(__dirname, 'src/main/index.ts'),
+          databaseWorker: resolve(__dirname, 'src/main/databaseWorker.ts')
         },
-        external: ['better-sqlite3']
+        external: ['better-sqlite3'],
+        output: {
+          entryFileNames: chunk => chunk.name === 'databaseWorker' ? 'databaseWorker.mjs' : '[name].js'
+        }
       }
     }
   },

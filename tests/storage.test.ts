@@ -73,7 +73,7 @@ test('storage info falls back to default when pointer target is unavailable', ()
   }
 })
 
-test('migration copies database and attachments then writes pointer', () => {
+test('migration copies database and attachments then writes pointer', async () => {
   const defaultDir = makeTempDir()
   const sourceDir = makeTempDir()
   const targetDir = join(defaultDir, 'target-data')
@@ -82,18 +82,20 @@ test('migration copies database and attachments then writes pointer', () => {
     mkdirSync(join(sourceDir, 'attachments'))
     writeFileSync(join(sourceDir, 'attachments', 'a.png'), 'image-a')
     writeFileSync(join(sourceDir, 'settings.json'), '{"imageCompression":true}')
+    writeFileSync(join(sourceDir, 'cloud-config.json'), '{"version":1,"tokenCipher":"encrypted-fixture"}')
     createMemoDb(join(sourceDir, 'memos.db'), ['a.png'])
 
-    const result = migrateStorageData(sourceDir, targetDir, defaultDir, {
-      validateDatabase: (dbPath) => {
+    const result = await migrateStorageData(sourceDir, targetDir, defaultDir, {
+      inspectDatabase: async (dbPath) => {
         assert.equal(existsSync(dbPath), true)
-      },
-      readAttachmentReferences: () => ['a.png']
+        return ['a.png']
+      }
     })
 
     assert.equal(result.success, true)
     assert.equal(existsSync(join(targetDir, 'memos.db')), true)
     assert.equal(readFileSync(join(targetDir, 'attachments', 'a.png'), 'utf-8'), 'image-a')
+    assert.equal(readFileSync(join(targetDir, 'cloud-config.json'), 'utf-8'), '{"version":1,"tokenCipher":"encrypted-fixture"}')
     assert.equal(resolveStorageInfo(defaultDir).currentDir, targetDir)
   } finally {
     rmSync(defaultDir, { recursive: true, force: true })
@@ -124,7 +126,7 @@ test('migration rejects non-empty target and target inside current directory', (
   }
 })
 
-test('failed migration does not rewrite pointer', () => {
+test('failed migration does not rewrite pointer', async () => {
   const defaultDir = makeTempDir()
   const sourceDir = makeTempDir()
   const originalCustomDir = makeTempDir()
@@ -134,7 +136,7 @@ test('failed migration does not rewrite pointer', () => {
     writeStoragePointer(defaultDir, originalCustomDir)
     writeFileSync(join(nonEmptyTarget, 'existing.txt'), 'data')
 
-    const result = migrateStorageData(sourceDir, nonEmptyTarget, defaultDir)
+    const result = await migrateStorageData(sourceDir, nonEmptyTarget, defaultDir)
 
     assert.equal(result.success, false)
     const pointer = JSON.parse(readFileSync(join(defaultDir, 'storage-location.json'), 'utf-8'))

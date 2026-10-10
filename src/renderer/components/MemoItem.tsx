@@ -21,6 +21,7 @@ interface MemoItemProps {
   memo: Memo
   isFocused: boolean
   onToggleFocus: () => void
+  onEditingChange: (memo: Memo | null, id: string) => void
 }
 
 function parseTagsFromContent(text: string): { content: string; tags: string[] } {
@@ -78,11 +79,14 @@ function StatusIcon({ status }: { status: MemoStatus }) {
   )
 }
 
-function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
+function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemProps) {
   const memoContent = memo.type === 'image' && memo.content === '图片备忘' ? '' : memo.content
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(memoContent)
   const [editAttachments, setEditAttachments] = useState<string[]>(memo.attachments || [])
+  const editBaseline = useRef<Memo | null>(null)
+  const [editError, setEditError] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
   const [menuStyle, setMenuStyle] = useState<{ top?: number; bottom?: number; right: number } | null>(null)
   const [pendingDelete, setPendingDelete] = useState(false)
@@ -90,6 +94,12 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
   const [copyKind, setCopyKind] = useState<'cli' | 'rich'>('cli')
   const [isExpanded, setIsExpanded] = useState(() => expandedMemoIds.has(memo.id))
   const [needsClamp, setNeedsClamp] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const pendingCollapseAnchorRef = useRef<{
+    card: HTMLDivElement
+    scrollParent: HTMLElement
+    viewportTop: number
+  } | null>(null)
   const contentRef = useRef<HTMLParagraphElement>(null)
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -163,6 +173,24 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
     measureClamp()
   }, [memoContent, isEditing, isFocused])
 
+  useLayoutEffect(() => {
+    const anchor = pendingCollapseAnchorRef.current
+    if (isExpanded || !anchor) return
+    pendingCollapseAnchorRef.current = null
+    if (!anchor.card.isConnected || !anchor.scrollParent.isConnected) return
+
+    const alignCard = () => {
+      if (!anchor.card.isConnected || !anchor.scrollParent.isConnected) return
+      const delta = anchor.card.getBoundingClientRect().top - anchor.viewportTop
+      if (Math.abs(delta) < 1) return
+      anchor.scrollParent.scrollTop += delta
+    }
+
+    alignCard()
+    const frame = window.requestAnimationFrame(alignCard)
+    return () => window.cancelAnimationFrame(frame)
+  }, [isExpanded])
+
   // 窗口宽度变化会改变换行数，跟随元素尺寸重测
   useEffect(() => {
     const el = contentRef.current
@@ -173,6 +201,19 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
   }, [])
 
   const toggleExpanded = () => {
+    if (isExpanded && cardRef.current) {
+      const scrollParent = getScrollParent(cardRef.current)
+      if (scrollParent) {
+        const parentRect = scrollParent.getBoundingClientRect()
+        const parentStyle = window.getComputedStyle(scrollParent)
+        const viewportTop = parentRect.top + scrollParent.clientTop + (parseFloat(parentStyle.paddingTop) || 0)
+        pendingCollapseAnchorRef.current = {
+          card: cardRef.current,
+          scrollParent,
+          viewportTop: Math.max(cardRef.current.getBoundingClientRect().top, viewportTop)
+        }
+      }
+    }
     setIsExpanded(prev => {
       if (prev) expandedMemoIds.delete(memo.id)
       else expandedMemoIds.add(memo.id)
@@ -226,17 +267,22 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
     setShowPriorityMenu(!showPriorityMenu)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (editSaving) return
     if (editContent.trim() || editAttachments.length > 0) {
       const { content, tags } = parseTagsFromContent(editContent)
-      updateMemo(memo.id, {
+      setEditSaving(true)
+      const saved = await updateMemo(memo.id, {
         content: editAttachments.length > 0 ? content : content || memo.content,
         tags,
         attachments: editAttachments,
         type: editAttachments.length > 0 ? 'image' : 'text'
-      })
+      }, editBaseline.current ?? undefined)
+      setEditSaving(false)
+      if (!saved) { setEditError('保存失败或待办已变化，草稿已保留；请取消后重新核对。'); return }
     }
     setIsEditing(false)
+    onEditingChange(null, memo.id)
   }
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -358,13 +404,17 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
     setEditContent(memoContent)
     setEditAttachments(memo.attachments || [])
     setIsEditing(false)
+    onEditingChange(null, memo.id)
   }
 
   const startEditing = () => {
+    editBaseline.current = structuredClone(memo)
+    setEditError('')
     const tagsStr = (memo.tags || []).map(t => `#${t}`).join(' ')
     setEditContent(memoContent + (tagsStr ? ' ' + tagsStr : ''))
     setEditAttachments(memo.attachments || [])
     setIsEditing(true)
+    onEditingChange(memo, memo.id)
   }
 
   const formatTime = (isoString: string) => {
@@ -405,6 +455,7 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
   return (
     <>
       <div
+        ref={cardRef}
         data-memo-id={memo.id}
         className={`group relative flex gap-2.5 px-3 py-2.5 bg-white rounded-xl border border-slate-100 shadow-card hover:border-slate-200 hover:shadow-card-hover transition-all duration-200 ${
           isFocused ? 'memo-focus-card' : isFreshMemo ? 'animate-card-in' : ''
@@ -416,7 +467,7 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
         <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priorityBar[memo.priority]}`} />
 
         {/* 左侧状态与窗口内展开入口 */}
-        <div className="memo-state-actions flex-shrink-0 flex flex-col items-center justify-center gap-2">
+        <div className="memo-state-actions sticky top-2 self-start flex-shrink-0 flex flex-col items-center justify-center gap-2">
           <button
             onClick={() => toggleStatus(memo.id)}
             className="flex-shrink-0 mt-0.5 cursor-pointer"
@@ -442,12 +493,27 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
                 : <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />}
             </svg>
           </button>
+          {needsClamp && isExpanded && !isFocused && (
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              aria-label="收起待办内容"
+              aria-expanded="true"
+              title="收起"
+              className="p-1 rounded-md text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12l5-5 5 5" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* 内容区域 */}
         <div className="flex-1 min-w-0">
           {isEditing ? (
             <div className="space-y-2">
+              {editError && <p role="alert" className="text-[12px] text-rose-500">{editError}</p>}
               <div className="flex items-start gap-2">
                 <textarea
                   ref={editTextareaRef}
@@ -467,6 +533,7 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
                   <button
                     type="button"
                     onClick={handleSave}
+                    disabled={editSaving}
                     className="p-1.5 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer"
                     aria-label="保存待办"
                     title="保存"
@@ -526,18 +593,14 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
                   aria-hidden="true"
                 />
               )}
-              {needsClamp && !isFocused && (
+              {needsClamp && !isFocused && !isExpanded && (
                 <button
                   type="button"
                   onClick={toggleExpanded}
                   aria-expanded={isExpanded}
-                  className={
-                    isExpanded
-                      ? 'mt-1 flex items-center gap-0.5 text-[11px] text-indigo-500 hover:text-indigo-600 cursor-pointer'
-                      : 'absolute right-0 bottom-0 flex items-center gap-0.5 bg-white pl-2 text-[11px] text-indigo-500 hover:text-indigo-600 cursor-pointer'
-                  }
+                  className="absolute right-0 bottom-0 flex items-center gap-0.5 bg-white pl-2 text-[11px] text-indigo-500 hover:text-indigo-600 cursor-pointer"
                 >
-                  {isExpanded ? '收起' : '展开'}
+                  展开
                   <svg
                     className="h-3 w-3"
                     viewBox="0 0 20 20"
@@ -548,7 +611,7 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
                     strokeLinejoin="round"
                     aria-hidden="true"
                   >
-                    {isExpanded ? <path d="M5 12l5-5 5 5" /> : <path d="M5 8l5 5 5-5" />}
+                    <path d="M5 8l5 5 5-5" />
                   </svg>
                 </button>
               )}
@@ -589,7 +652,7 @@ function MemoItem({ memo, isFocused, onToggleFocus }: MemoItemProps) {
         </div>
 
         {/* 右侧操作区（常驻显示） */}
-        <div className="memo-item-actions flex-shrink-0 flex flex-col items-end gap-0.5">
+        <div className="memo-item-actions sticky top-2 self-start flex-shrink-0 flex flex-col items-end gap-0.5">
           {pendingDelete ? (
             // 删除确认态
             <div className="flex flex-col gap-1 items-end">

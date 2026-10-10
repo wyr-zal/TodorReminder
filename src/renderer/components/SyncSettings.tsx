@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react'
 import { StorageInfo, TagSortMode } from '../../shared/types'
 import { useMemoStore } from '../store/memoStore'
 import { getThemeMode, saveThemeMode, ThemeMode } from '../utils/theme'
+import type { CloudPreview, CloudStatus } from '../../shared/cloudTypes'
 
 interface SyncConfig {
   token: string
-  repo: string
+  url: string
+  hasToken: boolean
+  connected: boolean
 }
 
 interface AppSettings {
@@ -21,7 +24,7 @@ interface SyncSettingsProps {
 type TabKey = 'sync' | 'image' | 'display' | 'storage'
 
 const tabs: { key: TabKey; label: string }[] = [
-  { key: 'sync', label: 'GitHub 同步' },
+  { key: 'sync', label: '服务器同步' },
   { key: 'image', label: '图片设置' },
   { key: 'display', label: '显示' },
   { key: 'storage', label: '数据位置' }
@@ -77,16 +80,21 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 }
 
 function SyncSettings({ onClose }: SyncSettingsProps) {
-  const [config, setConfig] = useState<SyncConfig>({ token: '', repo: '' })
+  const [config, setConfig] = useState<SyncConfig>({ token: '', url: '', hasToken: false, connected: false })
+  const [preview, setPreview] = useState<CloudPreview | null>(null)
+  const [syncBusy, setSyncBusy] = useState(false)
   const [settings, setSettings] = useState<AppSettings>({
     imageCompression: true,
     imageMaxSize: 500,
     imageMaxWidth: 1200
   })
-  const [status, setStatus] = useState<{ lastSync: string | null; isSyncing: boolean; error: string | null }>({
+  const [status, setStatus] = useState<CloudStatus>({
     lastSync: null,
     isSyncing: false,
-    error: null
+    error: null,
+    configured: false,
+    connected: false,
+    pending: 0
   })
   const [message, setMessage] = useState('')
   const [activeTab, setActiveTab] = useState<TabKey>('sync')
@@ -102,11 +110,12 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
     loadStatus()
     loadSettings()
     loadStorageInfo()
+    return window.electronAPI.sync.onComplete(() => { void loadStatus() })
   }, [])
 
   const loadConfig = async () => {
     const savedConfig = await window.electronAPI.sync.getConfig()
-    if (savedConfig) setConfig({ token: savedConfig.token, repo: savedConfig.repo })
+    setConfig({ ...savedConfig, token: '' })
   }
 
   const loadStatus = async () => {
@@ -132,16 +141,41 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
     setTimeout(() => setMessage(''), 2000)
   }
 
+  const persistConfig = async () => {
+    if ((!config.token && !config.hasToken) || !config.url) throw new Error('请填写服务器地址和Token')
+    await window.electronAPI.sync.setConfig({ url: config.url, token: config.token })
+    const saved = await window.electronAPI.sync.getConfig()
+    setConfig({ ...saved, token: '' })
+    await loadStatus()
+    return saved
+  }
+
   const handleSave = async () => {
-    if (!config.token || !config.repo) { showMessage('请填写 Token 和仓库名'); return }
-    await window.electronAPI.sync.setConfig(config)
-    showMessage('配置已保存')
+    setSyncBusy(true); setPreview(null)
+    try { await persistConfig(); setMessage('配置已保存') }
+    catch (error) { setMessage(`保存失败：${error instanceof Error ? error.message : '请检查配置'}`) }
+    finally { setSyncBusy(false) }
   }
 
   const handleSync = async () => {
-    if (!config.token || !config.repo) { showMessage('请先配置 Token 和仓库名'); return }
-    await window.electronAPI.sync.startBackground()
-    onClose()
+    setSyncBusy(true); setMessage('')
+    try {
+      const saved = await persistConfig()
+      if (!saved.connected) setPreview(await window.electronAPI.sync.preview())
+      else { await window.electronAPI.sync.startBackground(); onClose() }
+    } catch (error) { setMessage(`同步失败：${error instanceof Error ? error.message : '请稍后重试'}`) }
+    finally { setSyncBusy(false) }
+  }
+
+  const handleConfirm = async () => {
+    if (!preview) return
+    setSyncBusy(true)
+    try {
+      await window.electronAPI.sync.confirm(preview.ticket)
+      await window.electronAPI.sync.startBackground()
+      onClose()
+    } catch (error) { setMessage(`接入失败：${error instanceof Error ? error.message : '请重新预览'}`); setPreview(null) }
+    finally { setSyncBusy(false) }
   }
 
   const handleSettingsSave = async () => {
@@ -197,7 +231,8 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
           <h2 className="text-[15px] font-semibold text-slate-800 tracking-tight">设置</h2>
           <button
             onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+            disabled={isMigratingStorage}
+            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round">
               <path d="M6 18L18 6M6 6l12 12" />
@@ -211,6 +246,7 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
+              disabled={isMigratingStorage}
               className={`pb-2.5 text-[12px] font-medium transition-colors cursor-pointer border-b-2 -mb-px ${
                 activeTab === tab.key
                   ? 'border-indigo-500 text-indigo-600'
@@ -223,31 +259,35 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
         </div>
 
         {/* Tab 内容 */}
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 max-h-[calc(100vh-160px)] overflow-y-auto">
 
-          {/* ── GitHub 同步 ── */}
+          {/* ── 服务器同步 ── */}
           {activeTab === 'sync' && (
             <div className="space-y-3.5">
               <div>
-                <label className="block text-[11px] font-medium text-slate-500 mb-1.5 tracking-wide uppercase">Personal Access Token</label>
+                <label htmlFor="cloud-token" className="block text-[11px] font-medium text-slate-500 mb-1.5 tracking-wide uppercase">API Token</label>
                 <input
+                  id="cloud-token"
                   type="password"
                   value={config.token}
+                  disabled={isMigratingStorage}
                   onChange={(e) => setConfig(prev => ({ ...prev, token: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all"
-                  placeholder="ghp_xxxxxxxxxxxx"
+                  placeholder={config.hasToken ? '已保存，留空保持不变' : '至少32个字符'}
+                  autoComplete="off"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">需要 repo 权限</p>
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-500 mb-1.5 tracking-wide uppercase">仓库名称</label>
+                <label htmlFor="cloud-url" className="block text-[11px] font-medium text-slate-500 mb-1.5 tracking-wide uppercase">服务器地址</label>
                 <input
+                  id="cloud-url"
                   type="text"
-                  value={config.repo}
-                  onChange={(e) => setConfig(prev => ({ ...prev, repo: e.target.value }))}
+                  value={config.url}
+                  disabled={isMigratingStorage}
+                  onChange={(e) => { setConfig(prev => ({ ...prev, url: e.target.value, connected: false })); setPreview(null) }}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all"
-                  placeholder="username/repo-name"
+                  placeholder="https://你的接口域名"
                 />
               </div>
 
@@ -256,9 +296,13 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
                   上次同步：{new Date(status.lastSync).toLocaleString('zh-CN')}
                 </p>
               )}
+              <p className="text-[12px] text-slate-500" role="status">
+                {status.isSyncing ? '正在同步…' : status.connected ? `已接入 · 待同步 ${status.pending} 条` : '尚未接入，本地记录正常可用'}
+              </p>
+              {status.error && <p role="alert" className="text-[12px] text-rose-500">{status.error}</p>}
 
               {message && (
-                <p className={`text-[12px] font-medium ${message.includes('失败') || message.includes('请') ? 'text-rose-500' : 'text-emerald-600'}`}>
+                <p role="status" className={`text-[12px] font-medium ${message.includes('失败') || message.includes('请') ? 'text-rose-500' : 'text-emerald-600'}`}>
                   {message}
                 </p>
               )}
@@ -266,18 +310,30 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={handleSave}
+                  disabled={isMigratingStorage || syncBusy || status.isSyncing}
                   className="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[12px] font-medium transition-colors cursor-pointer"
                 >
                   保存配置
                 </button>
                 <button
                   onClick={handleSync}
-                  disabled={!config.token || !config.repo}
+                  disabled={isMigratingStorage || syncBusy || status.isSyncing || (!config.token && !config.hasToken) || !config.url}
                   className="flex-1 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-[12px] font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  立即同步
+                  {syncBusy ? '处理中…' : config.connected ? '立即同步' : '预览接入'}
                 </button>
               </div>
+              {preview && (
+                <div className="border-t border-slate-100 pt-3 space-y-2 text-[12px] text-slate-600">
+                  <p>本地 {preview.localCount} 条 · 服务器 {preview.remoteCount} 条 · 同ID {preview.conflicts} 条</p>
+                  <p>确认后先备份本地数据，再同步；同条冲突以服务器为准。</p>
+                  {preview.missingImages.length > 0 && <p role="alert" className="text-rose-500">缺少 {preview.missingImages.length} 个本地附件，请恢复后重试。</p>}
+                  <div className="flex gap-2">
+                    <button disabled={isMigratingStorage || syncBusy} onClick={() => setPreview(null)} className="flex-1 px-3 py-2 rounded-lg bg-slate-100 cursor-pointer">取消</button>
+                    <button disabled={isMigratingStorage || syncBusy || !!preview.missingImages.length} onClick={handleConfirm} className="flex-1 px-3 py-2 rounded-lg bg-indigo-500 text-white disabled:opacity-40 cursor-pointer">{syncBusy ? '处理中…' : '备份并接入'}</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

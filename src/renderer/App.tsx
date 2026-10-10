@@ -38,13 +38,16 @@ function App() {
     })
 
     const unsubscribeSync = window.electronAPI.sync.onComplete((result) => {
-      if (result.success) loadMemos()
+      if (result.success || result.changed) loadMemos()
     })
+    const handleOnline = () => window.electronAPI.sync.online()
+    window.addEventListener('online', handleOnline)
 
     return () => {
       unsubscribeTheme()
       unsubscribeFocus()
       unsubscribeSync()
+      window.removeEventListener('online', handleOnline)
     }
   }, [loadMemos])
 

@@ -5,6 +5,7 @@ export type MemoStatus = 'not_started' | 'in_progress' | 'completed'
 export type MemoType = 'text' | 'image'
 
 export interface Memo {
+  syncVersion?: string
   id: string
   content: string
   type: MemoType

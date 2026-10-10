@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, globalShortcut, Tray, Menu, nativeImage, clipboard, Notification, dialog, protocol, net, shell } from 'electron'
+import { app, BrowserWindow, screen, ipcMain, globalShortcut, Tray, Menu, nativeImage, clipboard, powerMonitor, dialog, protocol, net, shell } from 'electron'
 import { execFileSync } from 'child_process'
 import { basename, dirname, join } from 'path'
 import { pathToFileURL } from 'url'
@@ -21,8 +21,8 @@ import {
   createMemoClipboardPayload,
   shouldIncludeNativeClipboardImage
 } from '../shared/memoClipboard'
-import { initDatabase, closeDatabase, getAllMemos, createMemo, updateMemo, deleteMemo, getDeletedMemos, restoreMemo, hardDeleteMemo, exportToJSON, importFromJSON } from './database'
-import { loadSyncConfig, saveSyncConfig, getSyncStatus, sync } from './sync'
+import { initDatabase, closeDatabase, getCloudDatabase, getAllMemos, createMemo, updateMemo, deleteMemo, getDeletedMemos, restoreMemo, hardDeleteMemo, exportToJSON, inspectDatabaseFile } from './database'
+import { CloudController } from './cloudController'
 import { saveImage, getImageBase64, getImageBuffer, getExistingImagePath, deleteImage, exportImage, ensureThumbnail } from './image'
 import { constrainWindowBounds, loadWindowState, saveWindowState } from './window-state'
 import { migrateStorageData, resolveStorageInfo } from './storage'
@@ -32,6 +32,27 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let defaultUserDataPath = ''
 let storageInfo: StorageInfo | null = null
+let cloudController: CloudController | null = null
+let quittingCloud = false
+
+function cloudWindowVisible(): boolean {
+  return !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !windowState.isHidden
+}
+
+async function initCloudController(): Promise<void> {
+  const controller = new CloudController(
+    getCloudDatabase(),
+    async () => {
+      const [active, deleted] = await Promise.all([getAllMemos(), getDeletedMemos()])
+      return [...active, ...deleted]
+    },
+    app.getPath('userData'),
+    result => mainWindow?.webContents.send(IPC_CHANNELS.SYNC_COMPLETE, result)
+  )
+  cloudController = controller
+  controller.setWindowVisible(cloudWindowVisible())
+  await controller.resume()
+}
 let isAlwaysOnTop = true
 let savedBounds: Electron.Rectangle | null = null  // 保存隐藏前的位置
 let moveTimeout: NodeJS.Timeout | null = null  // 防抖定时器
@@ -590,6 +611,11 @@ function createWindow(options: { showOnCreate?: boolean } = {}) {
 
   mainWindow.on('show', () => {
     syncAlwaysOnTop(true)
+    cloudController?.setWindowVisible(cloudWindowVisible())
+  })
+
+  mainWindow.on('hide', () => {
+    cloudController?.setWindowVisible(false)
   })
 
   mainWindow.on('move', () => {
@@ -624,6 +650,7 @@ function showFromEdge() {
   const { x: screenX, y: screenY, width: screenWidth } = display.workArea
 
   windowState.isHidden = false
+  cloudController?.setWindowVisible(cloudWindowVisible())
 
   // 恢复到之前保存的位置，或默认位置
   if (savedBounds) {
@@ -826,6 +853,7 @@ function setupIPC() {
     // 吸附到右边缘
     windowState.hiddenEdge = 'right'
     windowState.isHidden = true
+    cloudController?.setWindowVisible(false)
     mainWindow.setBounds({ x: screenX + screenWidth - HIDDEN_VISIBLE_WIDTH })
     return true
   })
@@ -840,16 +868,22 @@ function setupIPC() {
     return getAllMemos()
   })
 
-  ipcMain.handle(IPC_CHANNELS.MEMO_ADD, (_, memo: Memo) => {
-    return createMemo(memo)
+  ipcMain.handle(IPC_CHANNELS.MEMO_ADD, async (_, memo: Memo) => {
+    const result = await createMemo(memo)
+    cloudController?.schedule()
+    return result
   })
 
-  ipcMain.handle(IPC_CHANNELS.MEMO_UPDATE, (_, { id, updates }: { id: string; updates: Partial<Memo> }) => {
-    return updateMemo(id, updates)
+  ipcMain.handle(IPC_CHANNELS.MEMO_UPDATE, async (_, { id, updates, expected }: { id: string; updates: Partial<Memo>; expected?: Memo }) => {
+    const result = await updateMemo(id, updates, expected)
+    cloudController?.schedule()
+    return result
   })
 
-  ipcMain.handle(IPC_CHANNELS.MEMO_DELETE, (_, id: string) => {
-    return deleteMemo(id)
+  ipcMain.handle(IPC_CHANNELS.MEMO_DELETE, async (_, id: string) => {
+    const result = await deleteMemo(id)
+    cloudController?.schedule()
+    return result
   })
 
   ipcMain.handle(
@@ -964,12 +998,16 @@ function setupIPC() {
     return getDeletedMemos()
   })
 
-  ipcMain.handle('memo:restore', (_, id: string) => {
-    return restoreMemo(id)
+  ipcMain.handle('memo:restore', async (_, id: string) => {
+    const result = await restoreMemo(id)
+    cloudController?.schedule()
+    return result
   })
 
-  ipcMain.handle('memo:hard-delete', (_, id: string) => {
-    return hardDeleteMemo(id)
+  ipcMain.handle('memo:hard-delete', async (_, id: string) => {
+    const result = await hardDeleteMemo(id)
+    cloudController?.schedule()
+    return result
   })
 
   // 导出数据
@@ -979,75 +1017,29 @@ function setupIPC() {
 
   // 同步操作
   ipcMain.handle(IPC_CHANNELS.SYNC_START, async () => {
-    const localData = exportToJSON()
-    const result = await sync(localData)
-    if (result) {
-      // 导入同步后的数据
-      importFromJSON(result)
-      return { success: true, data: result }
-    }
-    return { success: false, error: getSyncStatus().error }
+    return cloudController!.sync()
   })
 
-  // 后台同步（不阻塞UI，完成后发通知）
   ipcMain.handle(IPC_CHANNELS.SYNC_START_BACKGROUND, async () => {
-    // 立即返回，告诉渲染进程同步已开始
-    setImmediate(async () => {
-      try {
-        const localData = exportToJSON()
-        const result = await sync(localData)
-
-        if (result) {
-          // 导入同步后的数据
-          importFromJSON(result)
-
-          // 发送成功通知（保持显示直到用户点击）
-          new Notification({
-            title: '专注备忘',
-            body: '同步成功！',
-            timeoutType: 'never'
-          }).show()
-
-          // 通知渲染进程刷新数据
-          mainWindow?.webContents.send(IPC_CHANNELS.SYNC_COMPLETE, { success: true })
-        } else {
-          const error = getSyncStatus().error || '未知错误'
-          // 发送失败通知（保持显示直到用户点击）
-          new Notification({
-            title: '专注备忘',
-            body: `同步失败: ${error}`,
-            timeoutType: 'never'
-          }).show()
-
-          mainWindow?.webContents.send(IPC_CHANNELS.SYNC_COMPLETE, { success: false, error })
-        }
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '同步过程出错'
-        new Notification({
-          title: '专注备忘',
-          body: `同步失败: ${errorMsg}`,
-          timeoutType: 'never'
-        }).show()
-
-        mainWindow?.webContents.send(IPC_CHANNELS.SYNC_COMPLETE, { success: false, error: errorMsg })
-      }
-    })
-
+    setImmediate(() => { void cloudController!.sync() })
     return { started: true }
   })
 
   ipcMain.handle(IPC_CHANNELS.SYNC_STATUS, () => {
-    return getSyncStatus()
+    return cloudController!.status()
   })
 
-  ipcMain.handle(IPC_CHANNELS.SYNC_CONFIG, (_, config: { token: string; repo: string }) => {
-    saveSyncConfig({ ...config, branch: 'main' })
+  ipcMain.handle(IPC_CHANNELS.SYNC_CONFIG, async (_, config: { token: string; url: string }) => {
+    await cloudController!.save(config)
     return true
   })
 
   ipcMain.handle('sync:get-config', () => {
-    return loadSyncConfig()
+    return cloudController!.view()
   })
+  ipcMain.handle('sync:preview', () => cloudController!.preview())
+  ipcMain.handle('sync:confirm', (_, ticket: string) => cloudController!.confirm(ticket))
+  ipcMain.on('sync:online', () => cloudController?.schedule())
 
   // 设置操作
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
@@ -1117,7 +1109,8 @@ function setupIPC() {
     return getImageBase64(filename)
   })
 
-  ipcMain.handle('image:delete', (_, filename: string) => {
+  ipcMain.handle('image:delete', async (_, filename: string) => {
+    if (await getCloudDatabase().isImageReferenced(filename)) return false
     return deleteImage(filename)
   })
 
@@ -1234,11 +1227,13 @@ function setupIPC() {
       const sourceDir = app.getPath('userData')
       const defaultDir = defaultUserDataPath || sourceDir
 
-      closeDatabase()
-      const result = migrateStorageData(sourceDir, targetDir, defaultDir)
+      await cloudController?.beginStorageMigration()
+      await closeDatabase()
+      const result = await migrateStorageData(sourceDir, targetDir, defaultDir, { inspectDatabase: inspectDatabaseFile })
 
       if (!result.success) {
-        initDatabase()
+        await initDatabase()
+        await initCloudController()
         return result
       }
 
@@ -1251,21 +1246,24 @@ function setupIPC() {
   )
 }
 
-function startApp(): void {
+function startApp(): Promise<void> {
   const startSilently = shouldStartSilently()
   configureStorageDirectory()
   normalizeOpenAtLoginForSilentStartup()
-  initDatabase()
-  registerImageProtocol()
-  createWindow({ showOnCreate: !startSilently })
-  createTray()
-  registerShortcuts()
-  setupIPC()
+  return initDatabase().then(async () => {
+    registerImageProtocol()
+    createWindow({ showOnCreate: !startSilently })
+    createTray()
+    registerShortcuts()
+    setupIPC()
+    await initCloudController()
+    powerMonitor.on('resume', () => cloudController?.schedule())
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      }
+    })
   })
 }
 
@@ -1282,7 +1280,10 @@ if (!hasSingleInstanceLock) {
     showMainWindowFromUserAction()
   })
 
-  app.whenReady().then(startApp)
+  app.whenReady().then(startApp).catch(error => {
+    console.error('Failed to initialize application:', error)
+    app.quit()
+  })
 }
 
 app.on('window-all-closed', () => {
@@ -1291,7 +1292,23 @@ app.on('window-all-closed', () => {
   }
 })
 
+app.on('before-quit', event => {
+  if (quittingCloud) return
+  event.preventDefault()
+  quittingCloud = true
+  void (async () => {
+    try {
+      await cloudController?.stop()
+    } finally {
+      await closeDatabase()
+    }
+    app.quit()
+  })().catch(error => {
+    console.error('Failed to close application database worker:', error)
+    app.quit()
+  })
+})
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
-  closeDatabase()
 })

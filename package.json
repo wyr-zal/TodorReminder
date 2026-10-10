@@ -43,6 +43,7 @@
     },
     "asar": true,
     "asarUnpack": [
+      "dist/main/databaseWorker.mjs",
       "node_modules/better-sqlite3/**/*",
       "node_modules/sharp/**/*"
     ]

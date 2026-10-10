@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3'
 import * as fs from 'fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { StorageInfo, StorageMigrationResult } from '../shared/types'
@@ -14,6 +13,7 @@ const STORAGE_DATA_ENTRIES = [
   'settings.json',
   'window-state.json',
   'sync-config.json',
+  'cloud-config.json',
   'sync-repo'
 ]
 
@@ -24,8 +24,7 @@ interface StorageLocationPointer {
 }
 
 interface StorageValidationHooks {
-  validateDatabase?: (dbPath: string) => void
-  readAttachmentReferences?: (dbPath: string) => string[]
+  inspectDatabase?: (dbPath: string) => Promise<string[]> | string[]
 }
 
 function comparePath(pathname: string): string {
@@ -217,51 +216,11 @@ function listFilesRecursive(rootDir: string): string[] {
   return result.sort()
 }
 
-function readAttachmentReferences(dbPath: string): string[] {
-  if (!fs.existsSync(dbPath)) {
-    return []
-  }
-
-  const db = new Database(dbPath, { readonly: true })
-  try {
-    const rows = db.prepare('SELECT attachments FROM memos').all() as Array<{ attachments: string }>
-    return rows.flatMap((row) => {
-      try {
-        const parsed = JSON.parse(row.attachments)
-        return Array.isArray(parsed)
-          ? parsed.filter((item): item is string => typeof item === 'string')
-          : []
-      } catch {
-        return []
-      }
-    })
-  } finally {
-    db.close()
-  }
-}
-
-function validateDatabase(dbPath: string): void {
-  if (!fs.existsSync(dbPath)) {
-    return
-  }
-
-  const db = new Database(dbPath, { readonly: true })
-  try {
-    const result = db.pragma('quick_check') as Array<{ quick_check?: string }>
-    const status = result[0]?.quick_check
-    if (status && status !== 'ok') {
-      throw new Error(`数据库校验失败：${status}`)
-    }
-  } finally {
-    db.close()
-  }
-}
-
-function validateCopiedStorage(
+async function validateCopiedStorage(
   sourceDir: string,
   targetDir: string,
   hooks: StorageValidationHooks = {}
-): string[] {
+): Promise<string[]> {
   const warnings: string[] = []
   const sourceDbPath = join(sourceDir, 'memos.db')
   const targetDbPath = join(targetDir, 'memos.db')
@@ -270,9 +229,12 @@ function validateCopiedStorage(
     throw new Error('数据库文件未复制成功')
   }
 
-  const validateDatabaseFile = hooks.validateDatabase || validateDatabase
-  const getAttachmentReferences = hooks.readAttachmentReferences || readAttachmentReferences
-  validateDatabaseFile(targetDbPath)
+  const inspectDatabase = hooks.inspectDatabase
+  let attachmentReferences: string[] = []
+  if (fs.existsSync(targetDbPath)) {
+    if (!inspectDatabase) throw new Error('数据库验证 Worker 未提供')
+    attachmentReferences = await inspectDatabase(targetDbPath)
+  }
 
   const sourceAttachmentFiles = listFilesRecursive(join(sourceDir, 'attachments'))
   const targetAttachmentFiles = listFilesRecursive(join(targetDir, 'attachments'))
@@ -282,7 +244,7 @@ function validateCopiedStorage(
 
   const sourceAttachmentDir = join(sourceDir, 'attachments')
   const targetAttachmentDir = join(targetDir, 'attachments')
-  getAttachmentReferences(sourceDbPath).forEach((filename) => {
+  attachmentReferences.forEach((filename) => {
     if (basename(filename) !== filename) {
       warnings.push(`附件文件名无效，已跳过校验：${filename}`)
       return
@@ -300,12 +262,12 @@ function validateCopiedStorage(
   return warnings
 }
 
-export function migrateStorageData(
+export async function migrateStorageData(
   sourceDir: string,
   targetDir: string,
   defaultDir: string,
   hooks: StorageValidationHooks = {}
-): StorageMigrationResult {
+): Promise<StorageMigrationResult> {
   const warnings: string[] = []
 
   try {
@@ -324,7 +286,7 @@ export function migrateStorageData(
 
     ensureDirectory(targetPath)
     copyStorageEntries(sourcePath, targetPath)
-    warnings.push(...validateCopiedStorage(sourcePath, targetPath, hooks))
+    warnings.push(...await validateCopiedStorage(sourcePath, targetPath, hooks))
     writeStoragePointer(defaultPath, targetPath)
 
     return {

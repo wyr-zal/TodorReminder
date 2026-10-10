@@ -1,0 +1,338 @@
+import Database from 'better-sqlite3'
+import { existsSync } from 'node:fs'
+import { Memo } from '../shared/types'
+import { CloudDatabaseCore } from './cloudDatabaseCore'
+
+let db: Database.Database | null = null
+let cloudDb: CloudDatabaseCore | null = null
+
+export function getCloudDatabase(): CloudDatabaseCore {
+  if (!cloudDb) throw new Error('Database not initialized')
+  return cloudDb
+}
+
+export function initDatabase(dbPath: string): void {
+  db = new Database(dbPath)
+
+  // 创建表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memos (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      type TEXT DEFAULT 'text',
+      priority TEXT DEFAULT 'unimportant',
+      status TEXT DEFAULT 'not_started',
+      attachments TEXT DEFAULT '[]',
+      tags TEXT DEFAULT '[]',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      completedAt TEXT,
+      deviceId TEXT,
+      deleted INTEGER DEFAULT 0
+    )
+  `)
+
+  // 迁移：添加 tags 列（如果不存在）
+  try {
+    db.exec(`ALTER TABLE memos ADD COLUMN tags TEXT DEFAULT '[]'`)
+  } catch (e) {
+    // 列已存在，忽略错误
+  }
+
+  // 迁移：添加 completedAt 列，并用最后更新时间近似回填历史完成记录
+  try {
+    db.exec(`ALTER TABLE memos ADD COLUMN completedAt TEXT`)
+  } catch (e) {
+    // 列已存在，忽略错误
+  }
+  db.exec(`
+    UPDATE memos
+    SET completedAt = updatedAt
+    WHERE status = 'completed' AND completedAt IS NULL
+  `)
+
+  // 迁移：二档重要等级与三档任务进度
+  db.exec(`
+    UPDATE memos
+    SET priority = CASE
+      WHEN priority = 'high' THEN 'important'
+      WHEN priority IN ('medium', 'low') THEN 'unimportant'
+      ELSE priority
+    END
+    WHERE priority IN ('high', 'medium', 'low');
+
+    UPDATE memos
+    SET status = CASE
+      WHEN status IN ('pending', 'deferred') THEN 'not_started'
+      ELSE status
+    END
+    WHERE status IN ('pending', 'deferred');
+  `)
+
+  // 创建索引
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_memos_status ON memos(status);
+    CREATE INDEX IF NOT EXISTS idx_memos_priority ON memos(priority);
+    CREATE INDEX IF NOT EXISTS idx_memos_deleted ON memos(deleted);
+  `)
+  cloudDb = new CloudDatabaseCore(db)
+}
+
+export function getAllMemos(): Memo[] {
+  if (!db) return []
+
+  const rows = db.prepare(`
+    SELECT * FROM memos
+    WHERE deleted = 0
+    ORDER BY
+      CASE priority
+        WHEN 'important' THEN 1
+        WHEN 'unimportant' THEN 2
+      END,
+      createdAt DESC
+  `).all() as any[]
+
+  return rows.map(row => ({
+    ...row,
+    syncVersion: cloudDb?.meta(row.id)?.version,
+    attachments: JSON.parse(row.attachments),
+    tags: JSON.parse(row.tags || '[]'),
+    deleted: Boolean(row.deleted)
+  }))
+}
+
+export function getMemoById(id: string): Memo | null {
+  if (!db) return null
+
+  const row = db.prepare('SELECT * FROM memos WHERE id = ?').get(id) as any
+  if (!row) return null
+
+  return {
+    ...row,
+    syncVersion: cloudDb?.meta(row.id)?.version,
+    attachments: JSON.parse(row.attachments),
+    tags: JSON.parse(row.tags || '[]'),
+    deleted: Boolean(row.deleted)
+  }
+}
+
+export function createMemo(memo: Memo): Memo {
+  if (!db) throw new Error('Database not initialized')
+
+  const stmt = db.prepare(`
+    INSERT INTO memos (id, content, type, priority, status, attachments, tags, createdAt, updatedAt, completedAt, deviceId, deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  db.transaction(() => {
+  stmt.run(
+    memo.id,
+    memo.content,
+    memo.type,
+    memo.priority,
+    memo.status,
+    JSON.stringify(memo.attachments),
+    JSON.stringify(memo.tags || []),
+    memo.createdAt,
+    memo.updatedAt,
+    memo.completedAt,
+    memo.deviceId,
+    memo.deleted ? 1 : 0
+  )
+
+  cloudDb!.enqueue(memo, 'create')
+  })()
+
+  return memo
+}
+
+export function updateMemo(id: string, updates: Partial<Memo>, expected?: Memo): Memo | null {
+  if (!db) return null
+
+  const existing = getMemoById(id)
+  if (!existing) return null
+  if (expected) {
+    const baseline = (m: Memo) => JSON.stringify([m.id, m.content, m.type, m.priority, m.status, m.attachments, m.tags, m.updatedAt, m.completedAt, m.deleted, m.syncVersion ?? null])
+    if (baseline(existing) !== baseline(expected)) throw new Error('待办已发生变化，草稿未保存；请取消编辑后重新核对')
+  }
+
+  const updated: Memo = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString()
+  }
+
+  const stmt = db.prepare(`
+    UPDATE memos
+    SET content = ?, type = ?, priority = ?, status = ?, attachments = ?, tags = ?, updatedAt = ?, completedAt = ?, deleted = ?
+    WHERE id = ?
+  `)
+
+  db.transaction(() => {
+  stmt.run(
+    updated.content,
+    updated.type,
+    updated.priority,
+    updated.status,
+    JSON.stringify(updated.attachments),
+    JSON.stringify(updated.tags || []),
+    updated.updatedAt,
+    updated.completedAt,
+    updated.deleted ? 1 : 0,
+    id
+  )
+
+  cloudDb!.enqueue(updated, 'update')
+  })()
+
+  return updated
+}
+
+export function deleteMemo(id: string): boolean {
+  if (!db) return false
+
+  // 软删除
+  const stmt = db.prepare(`
+    UPDATE memos SET deleted = 1, updatedAt = ? WHERE id = ?
+  `)
+
+  return db.transaction(() => {
+  const existing = getMemoById(id)
+  if (!existing) return false
+  const result = stmt.run(new Date().toISOString(), id)
+  if (result.changes > 0) cloudDb!.enqueue(getMemoById(id)!, 'delete')
+  return result.changes > 0
+  })()
+}
+
+export function getDeletedMemos(): Memo[] {
+  if (!db) return []
+
+  const rows = db.prepare(`
+    SELECT * FROM memos
+    WHERE deleted = 1
+    ORDER BY updatedAt DESC
+  `).all() as any[]
+
+  return rows.map(row => ({
+    ...row,
+    attachments: JSON.parse(row.attachments),
+    tags: JSON.parse(row.tags || '[]'),
+    deleted: Boolean(row.deleted)
+  }))
+}
+
+export function restoreMemo(id: string): boolean {
+  if (!db) return false
+
+  const stmt = db.prepare(`
+    UPDATE memos SET deleted = 0, updatedAt = ? WHERE id = ?
+  `)
+
+  return db.transaction(() => {
+  const existing = getMemoById(id)
+  if (!existing) return false
+  const result = stmt.run(new Date().toISOString(), id)
+  if (result.changes > 0) cloudDb!.enqueue(getMemoById(id)!, 'restore')
+  return result.changes > 0
+  })()
+}
+
+export function hardDeleteMemo(id: string): boolean {
+  if (!db) return false
+
+  const stmt = db.prepare('DELETE FROM memos WHERE id = ?')
+  return db.transaction(() => {
+  const existing = getMemoById(id)
+  if (!existing) return false
+  const result = stmt.run(id)
+  if (result.changes > 0) cloudDb!.enqueue(existing, 'purge')
+  return result.changes > 0
+  })()
+}
+
+// 导出为 JSON (用于 Git 同步)
+export function exportToJSON(): { version: string; lastSync: string; memos: Memo[] } {
+  const memos = getAllMemos()
+  return {
+    version: '1.0',
+    lastSync: new Date().toISOString(),
+    memos
+  }
+}
+
+// 从 JSON 导入 (用于 Git 同步)
+export function importFromJSON(data: { memos: Memo[] }): void {
+  if (!db) return
+
+  const insertOrUpdate = db.prepare(`
+    INSERT OR REPLACE INTO memos (id, content, type, priority, status, attachments, tags, createdAt, updatedAt, completedAt, deviceId, deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  const transaction = db.transaction((memos: Memo[]) => {
+    for (const sourceMemo of memos) {
+      const legacyMemo = sourceMemo as unknown as { priority: string; status: string }
+      const memo: Memo = {
+        ...sourceMemo,
+        priority: legacyMemo.priority === 'high' || legacyMemo.priority === 'important'
+          ? 'important'
+          : 'unimportant',
+        status: legacyMemo.status === 'completed'
+          ? 'completed'
+          : legacyMemo.status === 'in_progress' || legacyMemo.status === 'not_started'
+            ? legacyMemo.status
+            : 'not_started'
+      }
+      const completedAt = memo.status === 'completed'
+        ? memo.completedAt ?? memo.updatedAt
+        : null
+
+      insertOrUpdate.run(
+        memo.id,
+        memo.content,
+        memo.type,
+        memo.priority,
+        memo.status,
+        JSON.stringify(memo.attachments),
+        JSON.stringify(memo.tags || []),
+        memo.createdAt,
+        memo.updatedAt,
+        completedAt,
+        memo.deviceId,
+        memo.deleted ? 1 : 0
+      )
+    }
+  })
+
+  transaction(data.memos)
+}
+
+export function closeDatabase(): void {
+  if (db) {
+    cloudDb = null
+    db.close()
+    db = null
+  }
+}
+
+export function inspectDatabaseFile(dbPath: string): string[] {
+  if (!existsSync(dbPath)) return []
+  const inspectDb = new Database(dbPath, { readonly: true })
+  try {
+    const result = inspectDb.pragma('quick_check') as Array<{ quick_check?: string }>
+    const status = result[0]?.quick_check
+    if (status && status !== 'ok') throw new Error(`数据库校验失败：${status}`)
+    const rows = inspectDb.prepare('SELECT attachments FROM memos').all() as Array<{ attachments: string }>
+    return rows.flatMap(row => {
+      try {
+        const parsed = JSON.parse(row.attachments)
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+      } catch {
+        return []
+      }
+    })
+  } finally {
+    inspectDb.close()
+  }
+}
