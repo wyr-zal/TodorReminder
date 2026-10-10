@@ -95,7 +95,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
   const [isExpanded, setIsExpanded] = useState(() => expandedMemoIds.has(memo.id))
   const [needsClamp, setNeedsClamp] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
-  const pendingCollapseAnchorRef = useRef<{
+  const pendingCardAnchorRef = useRef<{
     card: HTMLDivElement
     scrollParent: HTMLElement
     viewportTop: number
@@ -174,9 +174,9 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
   }, [memoContent, isEditing, isFocused])
 
   useLayoutEffect(() => {
-    const anchor = pendingCollapseAnchorRef.current
-    if (isExpanded || !anchor) return
-    pendingCollapseAnchorRef.current = null
+    const anchor = pendingCardAnchorRef.current
+    if (!anchor) return
+    pendingCardAnchorRef.current = null
     if (!anchor.card.isConnected || !anchor.scrollParent.isConnected) return
 
     const alignCard = () => {
@@ -189,7 +189,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     alignCard()
     const frame = window.requestAnimationFrame(alignCard)
     return () => window.cancelAnimationFrame(frame)
-  }, [isExpanded])
+  }, [isExpanded, isEditing])
 
   // 窗口宽度变化会改变换行数，跟随元素尺寸重测
   useEffect(() => {
@@ -200,20 +200,41 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     return () => observer.disconnect()
   }, [])
 
-  const toggleExpanded = () => {
-    if (isExpanded && cardRef.current) {
+  const captureCardAnchor = () => {
+    if (cardRef.current) {
       const scrollParent = getScrollParent(cardRef.current)
       if (scrollParent) {
         const parentRect = scrollParent.getBoundingClientRect()
         const parentStyle = window.getComputedStyle(scrollParent)
         const viewportTop = parentRect.top + scrollParent.clientTop + (parseFloat(parentStyle.paddingTop) || 0)
-        pendingCollapseAnchorRef.current = {
+        pendingCardAnchorRef.current = {
           card: cardRef.current,
           scrollParent,
           viewportTop: Math.max(cardRef.current.getBoundingClientRect().top, viewportTop)
         }
       }
     }
+  }
+
+  const scrollToEnd = () => {
+    const card = cardRef.current
+    if (!card) return
+    if (isFocused) {
+      card.scrollTo({ top: card.scrollHeight, behavior: 'instant' })
+      return
+    }
+    const scrollParent = getScrollParent(card)
+    if (!scrollParent) return
+    const viewportBottom = scrollParent.getBoundingClientRect().top + scrollParent.clientTop + scrollParent.clientHeight
+    const paddingBottom = parseFloat(window.getComputedStyle(scrollParent).paddingBottom) || 0
+    scrollParent.scrollTo({
+      top: scrollParent.scrollTop + card.getBoundingClientRect().bottom - viewportBottom + paddingBottom,
+      behavior: 'instant'
+    })
+  }
+
+  const toggleExpanded = () => {
+    if (isExpanded) captureCardAnchor()
     setIsExpanded(prev => {
       if (prev) expandedMemoIds.delete(memo.id)
       else expandedMemoIds.add(memo.id)
@@ -281,6 +302,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
       setEditSaving(false)
       if (!saved) { setEditError('保存失败或待办已变化，草稿已保留；请取消后重新核对。'); return }
     }
+    captureCardAnchor()
     setIsEditing(false)
     onEditingChange(null, memo.id)
   }
@@ -504,6 +526,19 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 12l5-5 5 5" />
+              </svg>
+            </button>
+          )}
+          {needsClamp && (isExpanded || isFocused) && !isEditing && (
+            <button
+              type="button"
+              onClick={scrollToEnd}
+              aria-label="跳到当前待办末尾"
+              title="跳到末尾"
+              className="p-1 rounded-md text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3v12m-5-5 5 5 5-5M5 21h14" />
               </svg>
             </button>
           )}

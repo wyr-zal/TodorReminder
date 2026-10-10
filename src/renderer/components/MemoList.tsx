@@ -209,7 +209,8 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
                   ref={rowVirtualizer.measureElement}
                   className="absolute top-0 left-0 w-full pb-1.5"
                   style={{
-                    transform: virtualRow.index === focusedIndex ? undefined : `translateY(${virtualRow.start}px)`,
+                    // Use layout offsets so sticky actions follow the scroll viewport.
+                    top: virtualRow.start,
                     height: virtualRow.index === focusedIndex ? virtualRow.size : undefined
                   }}
                 >
