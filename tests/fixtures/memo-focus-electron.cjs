@@ -38,6 +38,47 @@ app.whenReady().then(async () => {
   await win.loadFile(resolve(__dirname, '../../dist/renderer/index.html'))
   win.showInactive()
   await wait(`document.querySelectorAll('[aria-label="全屏展开"]').length > 0`)
+  const inputBeforeAttachments = await js(`(() => {
+    const textarea = document.querySelector('.memo-input-panel textarea')
+    return { top: textarea.getBoundingClientRect().top, height: textarea.getBoundingClientRect().height }
+  })()`)
+  await js(`{
+    const textarea = document.querySelector('.memo-input-panel textarea')
+    for (let index = 0; index < 200; index += 1) {
+      const clipboardData = new DataTransfer()
+      clipboardData.items.add(new File(['image'], 'image.png', { type: 'image/png' }))
+      textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }))
+    }
+  }`)
+  await wait('document.querySelectorAll(".memo-pending-images img").length === 200')
+  await wait('Array.from(document.querySelectorAll(".memo-pending-images img")).every(image => image.complete && image.naturalWidth > 0)')
+  const inputWithAttachments = await js(`(() => {
+    const textarea = document.querySelector('.memo-input-panel textarea')
+    const composer = document.querySelector('.memo-composer')
+    const previews = document.querySelector('.memo-pending-images')
+    return {
+      top: textarea.getBoundingClientRect().top,
+      height: textarea.getBoundingClientRect().height,
+      bottom: textarea.getBoundingClientRect().bottom,
+      composerBottom: composer.getBoundingClientRect().bottom,
+      previewScrollHeight: previews.scrollHeight,
+      previewClientHeight: previews.clientHeight,
+      listTop: document.querySelector('.memo-list-shell').getBoundingClientRect().top,
+      composerZIndex: getComputedStyle(composer).zIndex,
+      viewportHeight: innerHeight
+    }
+  })()`)
+  assert.equal(inputWithAttachments.height, inputBeforeAttachments.height)
+  assert.ok(inputWithAttachments.top > inputBeforeAttachments.top + 500, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.previewScrollHeight > inputWithAttachments.previewClientHeight, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.bottom <= inputWithAttachments.viewportHeight, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.composerBottom >= inputWithAttachments.viewportHeight - 3, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.listTop < inputWithAttachments.composerBottom, JSON.stringify(inputWithAttachments))
+  assert.equal(inputWithAttachments.composerZIndex, '10')
+  await js(`document.querySelector('.memo-input-panel textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+  await wait('!document.querySelector(".memo-pending-images")')
+  assert.equal(await js('Math.round(document.querySelector(".memo-input-panel textarea").getBoundingClientRect().height)'), inputBeforeAttachments.height)
+  assert.equal(await js('Math.round(document.querySelector(".memo-input-panel textarea").getBoundingClientRect().top)'), Math.round(inputBeforeAttachments.top))
   const bounds = win.getBounds()
   await js(`{
     const input = document.querySelector('.memo-input-panel textarea');
@@ -105,7 +146,7 @@ app.whenReady().then(async () => {
   }`)
   await wait(`document.querySelector('[data-memo-id="memo-0"] textarea')?.value === 'REMOTE_DELETE_DRAFT'`)
   assert.equal(await js(`document.querySelector('[data-memo-id="memo-0"] textarea').value`), 'REMOTE_DELETE_DRAFT')
-  console.log('MEMO_FOCUS_UI_PASS: bounds, edit draft, remote delete, top draft and Esc priority')
+  console.log('MEMO_FOCUS_UI_PASS: attachment layout, bounds, edit draft, remote delete, top draft and Esc priority')
   clearTimeout(timeout)
   app.exit(0)
 }).catch(error => { console.error(error); clearTimeout(timeout); app.exit(1) })

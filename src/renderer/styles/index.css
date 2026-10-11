@@ -36,6 +36,27 @@ html, body {
   background: #fafafa;
 }
 
+.memo-composer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.memo-composer-expanded {
+  position: absolute;
+  top: 36px;
+  left: 1px;
+  right: 1px;
+  z-index: 10;
+}
+
+.memo-composer-expanded .memo-pending-images {
+  max-height: max(0px, calc(100dvh - var(--memo-input-panel-height) - 50px));
+  overflow-y: auto;
+}
+
 /* 深色主题：使用独立表面层级，不对现有颜色做机械反转 */
 html.dark,
 html.dark body {
@@ -182,8 +203,7 @@ html.dark .focus\:bg-white:focus { background-color: #1e293b; }
 }
 
 /* 保留原布局和组件实例，只让选中待办占据标题栏下方的窗口空间。 */
-.memo-focus-active > .memo-input-panel,
-.memo-focus-active > .memo-input-divider,
+.memo-focus-active > .memo-composer,
 .memo-focus-active > .memo-snap-button,
 .memo-focus-active > .memo-list-shell {
   visibility: hidden;

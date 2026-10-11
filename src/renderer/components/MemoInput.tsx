@@ -18,7 +18,8 @@ import {
 
 interface MemoInputProps {
   inputRef: RefObject<HTMLTextAreaElement>
-  textareaMaxHeight?: number
+  inputPanelHeight: number
+  onPendingImagesChange: (hasPendingImages: boolean) => void
 }
 
 const priorityConfig: Record<Priority, { label: string; barClass: string; textClass: string }> = {
@@ -37,11 +38,16 @@ function parseTagsFromContent(text: string): { content: string; tags: string[] }
   return { content, tags: [...new Set(tags)] }
 }
 
-function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
+function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoInputProps) {
   const [content, setContent] = useState('')
   const [priority, setPriority] = useState<Priority>('unimportant')
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const { addMemo, addImageMemo } = useMemoStore()
+  const textareaHeight = Math.max(1, inputPanelHeight - 21)
+
+  useEffect(() => {
+    onPendingImagesChange(pendingImages.length > 0)
+  }, [onPendingImagesChange, pendingImages.length])
 
   const handleSubmit = async () => {
     if (!content.trim() && pendingImages.length === 0) return
@@ -146,10 +152,10 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
   const cfg = priorityConfig[priority]
 
   return (
-    <div className="h-full flex flex-col px-3 py-2.5 border-b border-slate-100 bg-white">
+    <div className="flex flex-col px-3 py-2.5 border-b border-slate-100 bg-white" style={{ minHeight: inputPanelHeight }}>
       {/* 待添加的图片预览 */}
       {pendingImages.length > 0 && (
-        <div className="mb-1.5 flex flex-wrap gap-1.5 flex-shrink-0">
+        <div className="memo-pending-images mb-1.5 flex flex-wrap gap-1.5 flex-shrink-0">
           {pendingImages.map((filename) => (
             <PendingImagePreview
               key={filename}
@@ -161,7 +167,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
         </div>
       )}
 
-      <div className="flex items-stretch gap-2 flex-1 min-h-0">
+      <div className="flex items-stretch gap-2 flex-shrink-0" style={{ height: textareaHeight }}>
         {/* 优先级竖条 + 点击切换 */}
         <button
           onClick={cyclePriority}
@@ -171,7 +177,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
           <div className={`w-1 h-6 rounded-full ${cfg.barClass} transition-all duration-200 group-hover:h-7`} />
         </button>
 
-        {/* 输入框：撑满整个面板高度 */}
+        {/* 输入框保持基础高度，附件预览不参与压缩 */}
         <textarea
           ref={inputRef as RefObject<HTMLTextAreaElement>}
           value={content}
@@ -182,7 +188,7 @@ function MemoInput({ inputRef, textareaMaxHeight = 120 }: MemoInputProps) {
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={pendingImages.length > 0 ? '添加说明… Enter 保存' : '记录想法… Tab 切换重要等级'}
-          className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all resize-none font-inter w-full"
+          className="h-full min-h-0 flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all resize-none font-inter w-full"
           style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
         />
 

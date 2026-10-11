@@ -28,6 +28,7 @@ function App() {
   const { loadMemos, memos } = useMemoStore()
   const [focusedMemoId, setFocusedMemoId] = useState<string | null>(null)
   const [inputPanelHeight, setInputPanelHeight] = useState(getSavedInputPanelHeight)
+  const [hasPendingImages, setHasPendingImages] = useState(false)
 
   useEffect(() => {
     loadMemos()
@@ -120,18 +121,27 @@ function App() {
       <TitleBar />
 
       {/* 输入区域（高度可拖拽） */}
-      <div className="memo-input-panel" style={{ height: inputPanelHeight, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-        <MemoInput inputRef={inputRef} textareaMaxHeight={inputPanelHeight - 28} />
-      </div>
-
-      {/* 拖拽分隔条 */}
       <div
-        onMouseDown={handleResizeStart}
-        className="memo-input-divider h-1.5 flex-shrink-0 bg-slate-100 hover:bg-indigo-100 flex items-center justify-center transition-colors group"
-        style={{ cursor: 'ns-resize' }}
-        title="拖动调整输入区大小"
+        className={`memo-composer${hasPendingImages ? ' memo-composer-expanded' : ''}`}
+        style={{ '--memo-input-panel-height': `${inputPanelHeight}px` } as React.CSSProperties}
       >
-        <div className="w-8 h-0.5 rounded-full bg-slate-300 group-hover:bg-indigo-400 transition-colors" />
+        <div className="memo-input-panel" style={{ minHeight: inputPanelHeight, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+          <MemoInput
+            inputRef={inputRef}
+            inputPanelHeight={inputPanelHeight}
+            onPendingImagesChange={setHasPendingImages}
+          />
+        </div>
+
+        {/* 拖拽分隔条 */}
+        <div
+          onMouseDown={handleResizeStart}
+          className="memo-input-divider h-1.5 flex-shrink-0 bg-slate-100 hover:bg-indigo-100 flex items-center justify-center transition-colors group"
+          style={{ cursor: 'ns-resize' }}
+          title="拖动调整输入区大小"
+        >
+          <div className="w-8 h-0.5 rounded-full bg-slate-300 group-hover:bg-indigo-400 transition-colors" />
+        </div>
       </div>
 
       <MemoList focusedMemoId={focusedMemoId} onFocusMemoChange={setFocusedMemoId} />

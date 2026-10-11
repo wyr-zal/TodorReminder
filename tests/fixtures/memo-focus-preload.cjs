@@ -12,6 +12,7 @@ let memos = Array.from({ length: 120 }, (_, index) => ({
 const calls = []
 let syncComplete
 let failDelete = false
+let pastedImageCount = 0
 const record = (kind, detail) => calls.push({ kind, detail })
 const ok = async () => true
 const unsubscribe = () => () => {}
@@ -34,7 +35,7 @@ const api = {
   },
   image: {
     preview: async filename => { record('preview', filename); return true },
-    pasteFromClipboard: async () => 'draft.png', save: async () => 'draft.png', delete: ok,
+    pasteFromClipboard: async () => `draft-${++pastedImageCount}.png`, save: async () => 'draft.png', delete: ok,
     copy: ok, copyPath: ok, get: async () => null
   },
   sync: { onComplete: callback => { syncComplete = callback; return () => {} }, getConfig: async () => ({ token: '', repo: '' }) },
