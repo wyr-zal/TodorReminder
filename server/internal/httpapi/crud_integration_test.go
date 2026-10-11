@@ -44,7 +44,7 @@ func TestCRUDIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := New(config.Config{Token: testToken, MaxUploadBytes: 1 << 20}, repo, files)
+	handler, err := New(config.Config{MaxUploadBytes: 1 << 20}, repo, files)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,6 @@ func TestCRUDIntegration(t *testing.T) {
 	call := func(method, path string, body any, op string) (int, map[string]any) {
 		b, _ := json.Marshal(body)
 		r, _ := http.NewRequest(method, live.URL+path, bytes.NewReader(b))
-		r.Header.Set("Authorization", "Bearer "+testToken)
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Idempotency-Key", op)
 		res, e := live.Client().Do(r)

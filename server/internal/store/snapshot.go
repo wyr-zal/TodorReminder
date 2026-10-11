@@ -81,7 +81,10 @@ func (s *MySQL) Snapshot(ctx context.Context) (Snapshot, error) {
 		return result, err
 	}
 	defer tx.Rollback()
-	if err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT dataset_id, schema_version FROM service_meta WHERE id = 1`).Scan(&result.DatasetID, &result.SchemaVersion); err != nil {
+		return result, err
+	}
+	if err = CheckExpectedDataset(ctx, result.DatasetID); err != nil {
 		return result, err
 	}
 	var changeCursor uint64

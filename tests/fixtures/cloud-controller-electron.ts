@@ -20,8 +20,8 @@ app.whenReady().then(async () => {
       const [active, deleted] = await Promise.all([database.getAllMemos(), database.getDeletedMemos()])
       return [...active, ...deleted]
     }, dir)
-    await controller.save({ url: process.env.CLOUD_TEST_URL!, token: process.env.CLOUD_TEST_TOKEN! })
-    assert.equal((await controller.view()).hasToken, true)
+    await controller.save({ url: process.env.CLOUD_TEST_URL! })
+    assert.equal((await controller.view()).url, process.env.CLOUD_TEST_URL)
     assert.equal((await controller.view()).connected, false)
     assert.equal((await controller.view() as any).token, undefined)
     assert.ok(!readFileSync(join(dir, 'cloud-config.json'), 'utf8').includes(process.env.CLOUD_TEST_TOKEN!))
@@ -45,15 +45,15 @@ app.whenReady().then(async () => {
     assert.equal(Date.parse((await database.getMemoById(local.id))!.createdAt), Date.parse(local.createdAt), 'initial migration preserves historical creation time')
     assert.equal(Date.parse((await database.getMemoById(local.id))!.completedAt!), Date.parse(local.completedAt), 'initial migration preserves historical completion time')
 
-    await controller.save({ url: process.env.CLOUD_TEST_URL!, token: '' })
-    assert.equal((await controller.view()).hasToken, true)
+    await controller.save({ url: process.env.CLOUD_TEST_URL! })
+    assert.equal((await controller.view()).url, process.env.CLOUD_TEST_URL)
     await Promise.all([
-      controller.save({ url: process.env.CLOUD_TEST_URL!, token: '' }),
-      controller.save({ url: 'http://127.0.0.1:1', token: '' })
+      controller.save({ url: process.env.CLOUD_TEST_URL! }),
+      controller.save({ url: 'http://127.0.0.1:1' })
     ])
     assert.equal((await controller.view()).url, 'http://127.0.0.1:1')
     assert.equal((await controller.status()).connected, false, 'last config must not leave an old worker running')
-    await controller.save({ url: process.env.CLOUD_TEST_URL!, token: '' })
+    await controller.save({ url: process.env.CLOUD_TEST_URL! })
     const dataset = (await database.getCloudDatabase().binding())!.datasetId
     await controller.stop()
     await database.closeDatabase()

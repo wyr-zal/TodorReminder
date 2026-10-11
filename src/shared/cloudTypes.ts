@@ -74,5 +74,5 @@ export interface CloudStatus {
   connected: boolean
   pending: number
 }
-export interface CloudConfigView { url: string; hasToken: boolean; connected: boolean }
+export interface CloudConfigView { url: string; connected: boolean }
 export interface CloudPreview { ticket: string; localCount: number; remoteCount: number; conflicts: number; missingImages: string[] }

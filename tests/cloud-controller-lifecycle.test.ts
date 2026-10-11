@@ -15,15 +15,14 @@ function loadController() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText
   const module = { exports: {} as Record<string, any> }
-  let config: { url: string; token: string } | null = null
+  let config: { url: string } | null = null
   let workerStops = 0
   let workerStarts = 0
   let failNextConfigSave = false
 
   class CloudApi {
     url: string
-    token: string
-    constructor(url: string, token: string) { this.url = url; this.token = token }
+    constructor(url: string) { this.url = url }
     expectDataset(_id: string) {}
   }
   class CloudSync {
@@ -72,11 +71,11 @@ test('migration gate rejects cloud lifecycle requests after stopping the worker'
   const database = { binding: async () => ({ datasetId: '11111111-1111-4111-8111-111111111111', url: 'https://memo.example' }), pending: async () => [] }
   const controller = new CloudController(database as any, async () => [], rootPath)
 
-  await controller.save({ url: 'https://memo.example', token: 'x'.repeat(40) })
+  await controller.save({ url: 'https://memo.example' })
   await controller.beginStorageMigration()
 
   assert.equal(getWorkerStops(), 1)
-  await assert.rejects(controller.save({ url: 'https://other.example', token: 'x'.repeat(40) }), /迁移中/)
+  await assert.rejects(controller.save({ url: 'https://other.example' }), /迁移中/)
   await assert.rejects(controller.preview(), /迁移中/)
   await assert.rejects(controller.confirm('ticket'), /迁移中/)
   assert.equal((await controller.sync()).success, false)
@@ -89,15 +88,25 @@ test('save restores the previous worker when config persistence fails', async ()
   const { CloudController, failNextConfigSave, getWorkerStarts, getWorkerStops } = loadController()
   const database = { binding: async () => ({ datasetId: '11111111-1111-4111-8111-111111111111', url: 'https://memo.example' }), pending: async () => [] }
   const controller = new CloudController(database as any, async () => [], rootPath)
-  const token = 'x'.repeat(40)
 
-  await controller.save({ url: 'https://memo.example', token })
+  await controller.save({ url: 'https://memo.example' })
   assert.equal(getWorkerStarts(), 1)
 
   failNextConfigSave()
-  await assert.rejects(controller.save({ url: 'https://other.example', token }), /simulated config write failure/)
+  await assert.rejects(controller.save({ url: 'https://other.example' }), /simulated config write failure/)
 
   assert.equal((await controller.view()).url, 'https://memo.example')
   assert.equal(getWorkerStops(), 1)
   assert.equal(getWorkerStarts(), 2)
+})
+
+test('a saved URL is configured even before dataset binding, without a token', async () => {
+  const { CloudController } = loadController()
+  const database = { binding: async () => null, pending: async () => [] }
+  const controller = new CloudController(database as any, async () => [], rootPath)
+  await controller.save({ url: 'https://memo.example' })
+  const status = await controller.status()
+  assert.equal(status.configured, true)
+  assert.equal(status.connected, false)
+  assert.equal((await controller.view()).url, 'https://memo.example')
 })

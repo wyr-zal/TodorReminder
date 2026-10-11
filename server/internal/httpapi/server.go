@@ -2,12 +2,9 @@ package httpapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"focus-memo/server/internal/attachments"
@@ -29,18 +26,17 @@ type Repository interface {
 }
 
 type Server struct {
-	cfg       config.Config
-	repo      Repository
-	files     *attachments.Storage
-	mux       *http.ServeMux
-	tokenHash [32]byte
+	cfg   config.Config
+	repo  Repository
+	files *attachments.Storage
+	mux   *http.ServeMux
 }
 
 func New(cfg config.Config, repo Repository, files *attachments.Storage) (*Server, error) {
-	if len(cfg.Token) < 32 || repo == nil || files == nil {
+	if repo == nil || files == nil {
 		return nil, errors.New("invalid HTTP server configuration")
 	}
-	s := &Server{cfg: cfg, repo: repo, files: files, mux: http.NewServeMux(), tokenHash: sha256.Sum256([]byte(cfg.Token))}
+	s := &Server{cfg: cfg, repo: repo, files: files, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /healthz", s.health)
 	s.mux.HandleFunc("GET /api/v1/meta", s.meta)
 	s.mux.HandleFunc("POST /api/v1/memos", s.createMemo)
@@ -57,16 +53,6 @@ func New(cfg config.Config, repo Repository, files *attachments.Storage) (*Serve
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if r.URL.Path != "/healthz" {
-		auth := r.Header.Get("Authorization")
-		validScheme := strings.HasPrefix(auth, "Bearer ")
-		digest := sha256.Sum256([]byte(strings.TrimPrefix(auth, "Bearer ")))
-		if !validScheme || subtle.ConstantTimeCompare(digest[:], s.tokenHash[:]) != 1 {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			fail(w, 401, "unauthorized", "Authentication required")
-			return
-		}
-	}
 	if expected := r.Header.Get("X-Focus-Dataset-ID"); expected != "" {
 		if !uuidPattern.MatchString(expected) {
 			fail(w, 422, "invalid_request", "Invalid dataset identifier")

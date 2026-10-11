@@ -55,7 +55,7 @@ const electronAPI = {
     start: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_START),
     startBackground: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_START_BACKGROUND),
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.SYNC_STATUS) as Promise<CloudStatus>,
-    setConfig: (config: { token: string; url: string }) =>
+    setConfig: (config: { url: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.SYNC_CONFIG, config),
     getConfig: () => ipcRenderer.invoke('sync:get-config') as Promise<CloudConfigView>,
     preview: () => ipcRenderer.invoke('sync:preview') as Promise<CloudPreview>,

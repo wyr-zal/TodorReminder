@@ -51,7 +51,6 @@ func upload(s *Server, data []byte, extra bool) *httptest.ResponseRecorder {
 	writer.Close()
 	req := httptest.NewRequest("POST", "/api/v1/attachments", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+testToken)
 	req.Header.Set("Idempotency-Key", testOp)
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, req)
@@ -112,7 +111,6 @@ func TestAttachmentHTTP(t *testing.T) {
 func TestAttachmentGetRejectsDatasetMismatch(t *testing.T) {
 	s, _ := harness(t)
 	req := httptest.NewRequest("GET", "/api/v1/attachments/"+testID, nil)
-	req.Header.Set("Authorization", "Bearer "+testToken)
 	req.Header.Set("X-Focus-Dataset-ID", "22222222-2222-4222-8222-222222222222")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, req)

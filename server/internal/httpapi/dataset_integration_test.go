@@ -32,7 +32,7 @@ func TestDatasetWriteGuardIntegration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	handler, e := New(config.Config{Token: testToken, MaxUploadBytes: 1 << 20}, repo, files)
+	handler, e := New(config.Config{MaxUploadBytes: 1 << 20}, repo, files)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -42,7 +42,6 @@ func TestDatasetWriteGuardIntegration(t *testing.T) {
 	op := testOperation()
 	body := `{"id":"` + id + `","content":"dataset guard"}`
 	r, _ := http.NewRequest("POST", server.URL+"/api/v1/memos", strings.NewReader(body))
-	r.Header.Set("Authorization", "Bearer "+testToken)
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Idempotency-Key", op)
 	r.Header.Set("X-Focus-Dataset-ID", testOperation())
@@ -61,7 +60,6 @@ func TestDatasetWriteGuardIntegration(t *testing.T) {
 	// Same operation is safe after correcting only the expected dataset: failed guard committed nothing.
 	meta, _ := repo.Meta(context.Background())
 	r, _ = http.NewRequest("POST", server.URL+"/api/v1/memos", strings.NewReader(body))
-	r.Header.Set("Authorization", "Bearer "+testToken)
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Idempotency-Key", op)
 	r.Header.Set("X-Focus-Dataset-ID", meta.DatasetID)

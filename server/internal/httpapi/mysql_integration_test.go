@@ -51,7 +51,7 @@ func TestMySQL57Integration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := New(config.Config{Token: testToken, MaxUploadBytes: 1 << 20}, repo, files)
+	handler, err := New(config.Config{MaxUploadBytes: 1 << 20}, repo, files)
 	if err != nil {
 		t.Fatal(err)
 	}

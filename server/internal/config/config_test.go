@@ -2,12 +2,11 @@ package config
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestLoad(t *testing.T) {
-	env := map[string]string{"FOCUS_MEMO_TOKEN": strings.Repeat("a", 64), "MYSQL_DSN": "user:secret@tcp(127.0.0.1:3306)/focus_memo", "ATTACHMENTS_DIR": t.TempDir()}
+	env := map[string]string{"MYSQL_DSN": "user:secret@tcp(127.0.0.1:3306)/focus_memo", "ATTACHMENTS_DIR": t.TempDir()}
 	get := func(k string) string { return env[k] }
 	c, err := Load(get)
 	if err != nil {
@@ -16,7 +15,7 @@ func TestLoad(t *testing.T) {
 	if c.ListenAddr != "127.0.0.1:8080" || c.MaxUploadBytes != 20<<20 || c.MaxImagePixels != 12_000_000 || !filepath.IsAbs(c.AttachmentsDir) {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
-	for _, key := range []string{"FOCUS_MEMO_TOKEN", "MYSQL_DSN", "ATTACHMENTS_DIR"} {
+	for _, key := range []string{"MYSQL_DSN", "ATTACHMENTS_DIR"} {
 		saved := env[key]
 		delete(env, key)
 		if _, err := Load(get); err == nil {
@@ -24,11 +23,6 @@ func TestLoad(t *testing.T) {
 		}
 		env[key] = saved
 	}
-	env["FOCUS_MEMO_TOKEN"] = "weak"
-	if _, err := Load(get); err == nil {
-		t.Fatal("accepted weak token")
-	}
-	env["FOCUS_MEMO_TOKEN"] = strings.Repeat("a", 64)
 	env["ATTACHMENTS_DIR"] = "relative"
 	if _, err := Load(get); err == nil {
 		t.Fatal("accepted relative data directory")

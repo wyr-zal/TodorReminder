@@ -36,9 +36,9 @@ export class CloudController {
     try {
       const config = loadCloudConfig(this.root)
       const binding = await this.db.binding()
-      return { url: config?.url ?? '', hasToken: !!config?.token, connected: !!config && binding?.url === config.url }
+      return { url: config?.url ?? '', connected: !!config && binding?.url === config.url }
     } catch {
-      return { url: '', hasToken: false, connected: false }
+      return { url: '', connected: false }
     }
   }
 
@@ -50,7 +50,7 @@ export class CloudController {
     if (this.migrating) return { isSyncing: false, lastSync: null, error: '数据目录迁移中', configured: false, connected: false, pending: 0 }
     if (this.worker) return this.worker.status()
     const [view, pending] = await Promise.all([this.view(), this.db.pending()])
-    return { isSyncing: false, lastSync: null, error: this.configError, configured: view.hasToken, connected: view.connected, pending: pending.length }
+    return { isSyncing: false, lastSync: null, error: this.configError, configured: !!view.url, connected: view.connected, pending: pending.length }
   }
 
   async resume(): Promise<void> {
@@ -59,7 +59,7 @@ export class CloudController {
       const config = loadCloudConfig(this.root)
       const binding = await this.db.binding()
       if (config && binding?.url === config.url) {
-        const api = new CloudApi(config.url, config.token)
+        const api = new CloudApi(config.url)
         api.expectDataset(binding.datasetId)
         const worker = new CloudSync(this.db, api, join(this.root, 'attachments'), this.onComplete)
         this.worker = worker
@@ -100,18 +100,16 @@ export class CloudController {
 
   schedule(): void { if (!this.migrating) this.worker?.schedule() }
 
-  async save(input: { url: string; token: string }): Promise<void> {
+  async save(input: { url: string }): Promise<void> {
     return this.serialized(() => this.saveExclusive(input))
   }
 
-  private async saveExclusive(input: { url: string; token: string }): Promise<void> {
+  private async saveExclusive(input: { url: string }): Promise<void> {
     this.assertAvailable()
-    let token = input.token.trim()
-    if (!token) token = loadCloudConfig(this.root)?.token ?? ''
-    const api = new CloudApi(input.url, token)
+    const api = new CloudApi(input.url)
     await this.stopWorker()
     try {
-      saveCloudConfig(this.root, { url: api.url, token })
+      saveCloudConfig(this.root, { url: api.url })
     } catch (error) {
       await this.resume()
       throw error
@@ -122,8 +120,8 @@ export class CloudController {
 
   private api(): CloudApi {
     const config = loadCloudConfig(this.root)
-    if (!config) throw new Error('请先保存服务器地址和Token')
-    return new CloudApi(config.url, config.token)
+    if (!config) throw new Error('请先保存服务器地址')
+    return new CloudApi(config.url)
   }
 
   private remoteHash(snapshot: CloudSnapshot): string {

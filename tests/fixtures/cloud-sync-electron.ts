@@ -10,7 +10,7 @@ import { CloudSync } from '../../src/main/cloudSync'
 import type { Memo } from '../../src/shared/types'
 
 const root = process.env.CLOUD_TEST_DIR!
-assert.ok(root && process.env.CLOUD_TEST_URL && process.env.CLOUD_TEST_TOKEN)
+assert.ok(root && process.env.CLOUD_TEST_URL)
 mkdirSync(root, { recursive: true })
 app.setPath('userData', root)
 const value = (id = randomUUID()): Memo => ({ id, content: 'offline create', type: 'text', priority: 'unimportant', status: 'not_started', attachments: [], tags: [], createdAt: '2021-01-02T03:04:05.000Z', updatedAt: '2021-01-02T03:04:05.000Z', completedAt: null, deviceId: 'fixture', deleted: false })
@@ -19,7 +19,7 @@ app.whenReady().then(async () => {
   try {
     await database.initDatabase()
     let db = database.getCloudDatabase()
-    const api = new CloudApi(process.env.CLOUD_TEST_URL!, process.env.CLOUD_TEST_TOKEN!)
+    const api = new CloudApi(process.env.CLOUD_TEST_URL!)
     const meta = await api.meta()
     api.expectDataset(meta.datasetId)
     await db.bind(meta.datasetId, api.url, [])
@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
     await new Promise<void>(resolve => socket.close(() => resolve()))
     const offlineMemo = value()
     await database.createMemo(offlineMemo)
-    const offlineApi = new CloudApi(`http://127.0.0.1:${unusedPort}`, process.env.CLOUD_TEST_TOKEN!)
+    const offlineApi = new CloudApi(`http://127.0.0.1:${unusedPort}`)
     offlineApi.expectDataset(meta.datasetId)
     const offline = new CloudSync(db, offlineApi, join(root, 'attachments'))
     assert.equal((await offline.sync()).success, false)

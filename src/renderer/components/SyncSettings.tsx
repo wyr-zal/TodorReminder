@@ -5,9 +5,7 @@ import { getThemeMode, saveThemeMode, ThemeMode } from '../utils/theme'
 import type { CloudPreview, CloudStatus } from '../../shared/cloudTypes'
 
 interface SyncConfig {
-  token: string
   url: string
-  hasToken: boolean
   connected: boolean
 }
 
@@ -80,7 +78,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 }
 
 function SyncSettings({ onClose }: SyncSettingsProps) {
-  const [config, setConfig] = useState<SyncConfig>({ token: '', url: '', hasToken: false, connected: false })
+  const [config, setConfig] = useState<SyncConfig>({ url: '', connected: false })
   const [preview, setPreview] = useState<CloudPreview | null>(null)
   const [syncBusy, setSyncBusy] = useState(false)
   const [settings, setSettings] = useState<AppSettings>({
@@ -115,7 +113,7 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
 
   const loadConfig = async () => {
     const savedConfig = await window.electronAPI.sync.getConfig()
-    setConfig({ ...savedConfig, token: '' })
+    setConfig(savedConfig)
   }
 
   const loadStatus = async () => {
@@ -142,10 +140,10 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
   }
 
   const persistConfig = async () => {
-    if ((!config.token && !config.hasToken) || !config.url) throw new Error('请填写服务器地址和Token')
-    await window.electronAPI.sync.setConfig({ url: config.url, token: config.token })
+    if (!config.url) throw new Error('请填写服务器地址')
+    await window.electronAPI.sync.setConfig({ url: config.url })
     const saved = await window.electronAPI.sync.getConfig()
-    setConfig({ ...saved, token: '' })
+    setConfig(saved)
     await loadStatus()
     return saved
   }
@@ -265,20 +263,6 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
           {activeTab === 'sync' && (
             <div className="space-y-3.5">
               <div>
-                <label htmlFor="cloud-token" className="block text-[11px] font-medium text-slate-500 mb-1.5 tracking-wide uppercase">API Token</label>
-                <input
-                  id="cloud-token"
-                  type="password"
-                  value={config.token}
-                  disabled={isMigratingStorage}
-                  onChange={(e) => setConfig(prev => ({ ...prev, token: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all"
-                  placeholder={config.hasToken ? '已保存，留空保持不变' : '至少32个字符'}
-                  autoComplete="off"
-                />
-              </div>
-
-              <div>
                 <label htmlFor="cloud-url" className="block text-[11px] font-medium text-slate-500 mb-1.5 tracking-wide uppercase">服务器地址</label>
                 <input
                   id="cloud-url"
@@ -317,7 +301,7 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
                 </button>
                 <button
                   onClick={handleSync}
-                  disabled={isMigratingStorage || syncBusy || status.isSyncing || (!config.token && !config.hasToken) || !config.url}
+                  disabled={isMigratingStorage || syncBusy || status.isSyncing || !config.url}
                   className="flex-1 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-[12px] font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {syncBusy ? '处理中…' : config.connected ? '立即同步' : '预览接入'}

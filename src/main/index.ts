@@ -1029,7 +1029,7 @@ function setupIPC() {
     return cloudController!.status()
   })
 
-  ipcMain.handle(IPC_CHANNELS.SYNC_CONFIG, async (_, config: { token: string; url: string }) => {
+  ipcMain.handle(IPC_CHANNELS.SYNC_CONFIG, async (_, config: { url: string }) => {
     await cloudController!.save(config)
     return true
   })

@@ -12,13 +12,13 @@ async function stop(server: Server): Promise<void> {
  server.closeAllConnections()
  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
 }
-test('HTTP redirects never forward credentials to another origin', async () => {
+test('HTTP redirects never forward requests to another origin', async () => {
  let received = false
  const target = createServer((_, res) => { received = true; res.end('{}') })
  const targetURL = await listen(target)
  const source = createServer((_, res) => { res.writeHead(307, { Location: targetURL + '/private' }); res.end() })
  const sourceURL = await listen(source)
- try { await assert.rejects(new CloudApi(sourceURL, token).meta()); assert.equal(received, false) }
+ try { await assert.rejects(new CloudApi(sourceURL).meta()); assert.equal(received, false) }
  finally { await stop(source); await stop(target) }
 })
 test('raw error bodies and malformed JSON cannot leak secrets or be accepted', async () => {
@@ -28,26 +28,29 @@ test('raw error bodies and malformed JSON cannot leak secrets or be accepted', a
  })
  const url = await listen(server)
  try {
-  await assert.rejects(new CloudApi(url, token).meta(), error => error instanceof CloudHttpError && !error.message.includes(token) && !error.message.includes('private-db-secret'))
-  await assert.rejects(new CloudApi(url, token).snapshot())
+  await assert.rejects(new CloudApi(url).meta(), error => error instanceof CloudHttpError && !error.message.includes(token) && !error.message.includes('private-db-secret'))
+  await assert.rejects(new CloudApi(url).snapshot())
  } finally { await stop(server) }
 })
 test('incremental changes request is dataset-bound and validates empty high-water pages', async () => {
  const datasetId = '11111111-1111-4111-8111-111111111111'
  let authorizedDataset = ''
+ let authorization: string | undefined
  const server = createServer((req, res) => {
   authorizedDataset = String(req.headers['x-focus-dataset-id'] ?? '')
+  authorization = req.headers.authorization
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify({ datasetId, schemaVersion: 1, cursor: '0', highWater: '0', hasMore: false, changes: [], attachments: [] }))
  })
  const url = await listen(server)
  try {
-  const api = new CloudApi(url, token)
+  const api = new CloudApi(url)
   api.expectDataset(datasetId)
   const page = await api.changes('0')
   assert.equal(page.cursor, '0')
   assert.equal(page.highWater, '0')
   assert.equal(authorizedDataset, datasetId)
+  assert.equal(authorization, undefined)
  } finally { await stop(server) }
 })
 test('stopping sync aborts an outstanding HTTP request', async () => {
@@ -56,7 +59,7 @@ test('stopping sync aborts an outstanding HTTP request', async () => {
  const server = createServer(() => seen())
  const url = await listen(server)
  try {
-  const api = new CloudApi(url, token)
+  const api = new CloudApi(url)
   const outcome = api.meta().then(() => null, error => error)
   await requested; api.abort()
   assert.ok(await outcome instanceof CloudHttpError)

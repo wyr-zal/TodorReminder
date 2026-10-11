@@ -5,14 +5,13 @@ export class CloudHttpError extends Error {
   readonly status: number
   readonly code: string
   constructor(status: number, code: string) {
-    super(status === 401 ? '服务器凭证无效' : status === 413 ? '请求或图片超过服务器限制' : status === 422 || status === 415 ? '待办或图片内容不合法，请修正后重试' : status === 409 ? '服务器拒绝了当前版本的请求' : '无法完成服务器请求，已保留本地数据')
+    super(status === 413 ? '请求或图片超过服务器限制' : status === 422 || status === 415 ? '待办或图片内容不合法，请修正后重试' : status === 409 ? '服务器拒绝了当前版本的请求' : '无法完成服务器请求，已保留本地数据')
     this.status = status
     this.code = code
   }
 }
 export class CloudApi {
   readonly url: string
-  private token: string
   private datasetId: string | null = null
   expectDataset(id: string): void {
     if (!uuidPattern.test(id) || (this.datasetId !== null && this.datasetId !== id)) throw new Error('服务器数据集绑定不一致')
@@ -20,17 +19,15 @@ export class CloudApi {
   }
   private controllers = new Set<AbortController>()
   abort(): void { for (const controller of this.controllers) controller.abort() }
-  constructor(url: string, token: string) {
+  constructor(url: string) {
     this.url = validateServerURL(url)
-    if (token.length < 32 || /\s/.test(token)) throw new Error('Token至少需要32个非空白字符')
-    this.token = token
   }
   private async bytes(path: string, init: RequestInit = {}, maxBytes = 32 << 20): Promise<{ data: Uint8Array; headers: Headers }> {
     const controller = new AbortController()
     this.controllers.add(controller)
     const timer = setTimeout(() => controller.abort(), 65000)
     try {
-      const res = await fetch(this.url + path, { ...init, redirect: 'error', signal: controller.signal, headers: { ...init.headers, Authorization: 'Bearer ' + this.token, ...(this.datasetId ? { 'X-Focus-Dataset-ID': this.datasetId } : {}) } })
+      const res = await fetch(this.url + path, { ...init, redirect: 'error', signal: controller.signal, headers: { ...init.headers, ...(this.datasetId ? { 'X-Focus-Dataset-ID': this.datasetId } : {}) } })
       const chunks: Uint8Array[] = []
       let length = 0
       const reader = res.body?.getReader()

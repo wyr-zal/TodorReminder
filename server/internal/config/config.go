@@ -10,7 +10,6 @@ import (
 
 type Config struct {
 	ListenAddr     string
-	Token          string
 	DSN            string
 	AttachmentsDir string
 	MaxUploadBytes int64
@@ -18,10 +17,7 @@ type Config struct {
 }
 
 func Load(get func(string) string) (Config, error) {
-	c := Config{ListenAddr: "127.0.0.1:8080", Token: get("FOCUS_MEMO_TOKEN"), DSN: get("MYSQL_DSN"), AttachmentsDir: get("ATTACHMENTS_DIR"), MaxUploadBytes: 20 << 20, MaxImagePixels: 12_000_000}
-	if len(c.Token) < 32 || strings.ContainsAny(c.Token, " \t\r\n") {
-		return Config{}, errors.New("FOCUS_MEMO_TOKEN must contain at least 32 non-whitespace characters")
-	}
+	c := Config{ListenAddr: "127.0.0.1:8080", DSN: get("MYSQL_DSN"), AttachmentsDir: get("ATTACHMENTS_DIR"), MaxUploadBytes: 20 << 20, MaxImagePixels: 12_000_000}
 	if c.DSN == "" {
 		return Config{}, errors.New("MYSQL_DSN is required")
 	}

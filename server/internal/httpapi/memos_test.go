@@ -14,7 +14,6 @@ import (
 
 const testID = "11111111-1111-4111-8111-111111111111"
 const testOp = "22222222-2222-4222-8222-222222222222"
-const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func (f *fakeRepo) CreateMemo(_ context.Context, op string, input store.CreateMemoRequest) (store.Receipt, error) {
 	f.input = input
@@ -34,7 +33,7 @@ func harness(t *testing.T) (*Server, *fakeRepo) {
 		t.Fatal(err)
 	}
 	repo := &fakeRepo{memo: store.Memo{ID: testID, Content: "hello", Version: "1"}}
-	s, err := New(config.Config{Token: testToken, MaxUploadBytes: 1 << 20, MaxImagePixels: 100}, repo, files)
+	s, err := New(config.Config{MaxUploadBytes: 1 << 20, MaxImagePixels: 100}, repo, files)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +41,6 @@ func harness(t *testing.T) (*Server, *fakeRepo) {
 }
 func request(s *Server, method, path, body, op string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
-	r.Header.Set("Authorization", "Bearer "+testToken)
 	r.Header.Set("Content-Type", "application/json")
 	if op != "" {
 		r.Header.Set("Idempotency-Key", op)

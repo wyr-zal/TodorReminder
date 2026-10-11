@@ -15,7 +15,6 @@ func TestChangesHTTPRequiresAndValidatesCursor(t *testing.T) {
 		"/api/v1/sync/changes?cursor=0&cursor=1",
 	} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
-		r.Header.Set("Authorization", "Bearer "+testToken)
 		r.Header.Set("X-Focus-Dataset-ID", testID)
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)
@@ -28,7 +27,6 @@ func TestChangesHTTPRequiresAndValidatesCursor(t *testing.T) {
 func TestChangesHTTPReturnsDatasetBoundPage(t *testing.T) {
 	s, _ := harness(t)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/sync/changes?cursor=0&limit=10", nil)
-	r.Header.Set("Authorization", "Bearer "+testToken)
 	r.Header.Set("X-Focus-Dataset-ID", testID)
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
