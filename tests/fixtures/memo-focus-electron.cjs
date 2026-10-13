@@ -38,23 +38,34 @@ app.whenReady().then(async () => {
   await win.loadFile(resolve(__dirname, '../../dist/renderer/index.html'))
   win.showInactive()
   await wait(`document.querySelectorAll('[aria-label="全屏展开"]').length > 0`)
+  await wait(`!!document.querySelector('[data-memo-id="memo-0"]')`)
   const inputBeforeAttachments = await js(`(() => {
     const textarea = document.querySelector('.memo-input-panel textarea')
-    return { top: textarea.getBoundingClientRect().top, height: textarea.getBoundingClientRect().height }
+    const listShell = document.querySelector('.memo-list-shell')
+    const listViewport = listShell.querySelector('.overflow-y-auto')
+    return {
+      top: textarea.getBoundingClientRect().top,
+      height: textarea.getBoundingClientRect().height,
+      filterTop: listShell.firstElementChild.getBoundingClientRect().top,
+      filterText: listShell.firstElementChild.textContent,
+      listTop: listShell.getBoundingClientRect().top,
+      firstMemoTop: document.querySelector('[data-memo-id="memo-0"]').getBoundingClientRect().top,
+      listViewportBottom: listViewport.getBoundingClientRect().bottom
+    }
   })()`)
-  await js(`{
+  const pasteImages = async count => js(`{
     const textarea = document.querySelector('.memo-input-panel textarea')
-    for (let index = 0; index < 200; index += 1) {
+    for (let index = 0; index < ${count}; index += 1) {
       const clipboardData = new DataTransfer()
       clipboardData.items.add(new File(['image'], 'image.png', { type: 'image/png' }))
       textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }))
     }
   }`)
-  await wait('document.querySelectorAll(".memo-pending-images img").length === 200')
-  await wait('Array.from(document.querySelectorAll(".memo-pending-images img")).every(image => image.complete && image.naturalWidth > 0)')
-  const inputWithAttachments = await js(`(() => {
+  const getAttachmentLayout = async () => js(`(() => {
     const textarea = document.querySelector('.memo-input-panel textarea')
     const composer = document.querySelector('.memo-composer')
+    const listShell = document.querySelector('.memo-list-shell')
+    const listViewport = listShell.querySelector('.overflow-y-auto')
     const previews = document.querySelector('.memo-pending-images')
     return {
       top: textarea.getBoundingClientRect().top,
@@ -63,22 +74,44 @@ app.whenReady().then(async () => {
       composerBottom: composer.getBoundingClientRect().bottom,
       previewScrollHeight: previews.scrollHeight,
       previewClientHeight: previews.clientHeight,
-      listTop: document.querySelector('.memo-list-shell').getBoundingClientRect().top,
-      composerZIndex: getComputedStyle(composer).zIndex,
+      filterTop: listShell.firstElementChild.getBoundingClientRect().top,
+      filterText: listShell.firstElementChild.textContent,
+      listTop: listShell.getBoundingClientRect().top,
+      firstMemoTop: document.querySelector('[data-memo-id="memo-0"]').getBoundingClientRect().top,
+      listViewportBottom: listViewport.getBoundingClientRect().bottom,
       viewportHeight: innerHeight
     }
   })()`)
+
+  await pasteImages(1)
+  await wait('document.querySelectorAll(".memo-pending-images img").length === 1')
+  await wait('Array.from(document.querySelectorAll(".memo-pending-images img")).every(image => image.complete && image.naturalWidth > 0)')
+  const inputWithOneAttachment = await getAttachmentLayout()
+  assert.equal(inputWithOneAttachment.height, inputBeforeAttachments.height)
+  assert.ok(inputWithOneAttachment.filterTop > inputBeforeAttachments.filterTop, JSON.stringify(inputWithOneAttachment))
+  assert.ok(inputWithOneAttachment.listTop >= inputWithOneAttachment.composerBottom - 1, JSON.stringify(inputWithOneAttachment))
+  assert.ok(inputWithOneAttachment.firstMemoTop > inputBeforeAttachments.firstMemoTop, JSON.stringify(inputWithOneAttachment))
+  assert.ok(inputWithOneAttachment.firstMemoTop < inputWithOneAttachment.listViewportBottom, JSON.stringify(inputWithOneAttachment))
+  assert.ok(inputWithOneAttachment.filterText.includes('work'), JSON.stringify(inputWithOneAttachment))
+
+  await pasteImages(199)
+  await wait('document.querySelectorAll(".memo-pending-images img").length === 200')
+  await wait('Array.from(document.querySelectorAll(".memo-pending-images img")).every(image => image.complete && image.naturalWidth > 0)')
+  const inputWithAttachments = await getAttachmentLayout()
   assert.equal(inputWithAttachments.height, inputBeforeAttachments.height)
-  assert.ok(inputWithAttachments.top > inputBeforeAttachments.top + 500, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.top > inputBeforeAttachments.top + 350, JSON.stringify(inputWithAttachments))
   assert.ok(inputWithAttachments.previewScrollHeight > inputWithAttachments.previewClientHeight, JSON.stringify(inputWithAttachments))
   assert.ok(inputWithAttachments.bottom <= inputWithAttachments.viewportHeight, JSON.stringify(inputWithAttachments))
-  assert.ok(inputWithAttachments.composerBottom >= inputWithAttachments.viewportHeight - 3, JSON.stringify(inputWithAttachments))
-  assert.ok(inputWithAttachments.listTop < inputWithAttachments.composerBottom, JSON.stringify(inputWithAttachments))
-  assert.equal(inputWithAttachments.composerZIndex, '10')
+  assert.ok(inputWithAttachments.composerBottom <= inputWithAttachments.viewportHeight - 200, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.filterTop >= inputWithAttachments.composerBottom - 1, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.listTop >= inputWithAttachments.composerBottom - 1, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.firstMemoTop < inputWithAttachments.listViewportBottom, JSON.stringify(inputWithAttachments))
+  assert.ok(inputWithAttachments.filterText.includes('work'), JSON.stringify(inputWithAttachments))
   await js(`document.querySelector('.memo-input-panel textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
   await wait('!document.querySelector(".memo-pending-images")')
   assert.equal(await js('Math.round(document.querySelector(".memo-input-panel textarea").getBoundingClientRect().height)'), inputBeforeAttachments.height)
   assert.equal(await js('Math.round(document.querySelector(".memo-input-panel textarea").getBoundingClientRect().top)'), Math.round(inputBeforeAttachments.top))
+  assert.equal(await js('Math.round(document.querySelector(".memo-list-shell").getBoundingClientRect().top)'), Math.round(inputBeforeAttachments.listTop))
   const bounds = win.getBounds()
   await js(`{
     const input = document.querySelector('.memo-input-panel textarea');
@@ -95,7 +128,7 @@ app.whenReady().then(async () => {
     bottom: document.querySelector('.memo-focus-card').getBoundingClientRect().bottom,
     height: innerHeight,
     hidden: getComputedStyle(document.querySelector('.memo-input-panel')).visibility,
-    clamp: !!document.querySelector('.memo-focus-card .line-clamp-4'),
+    clamp: !!document.querySelector('.memo-focus-card .line-clamp-3'),
     count: document.querySelectorAll('.memo-focus-card').length
   })`)
   assert.equal(view.same, true)

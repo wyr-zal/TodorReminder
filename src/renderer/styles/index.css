@@ -44,16 +44,9 @@ html, body {
   flex-shrink: 0;
 }
 
-.memo-composer-expanded {
-  position: absolute;
-  top: 36px;
-  left: 1px;
-  right: 1px;
-  z-index: 10;
-}
-
+/* Reserve the title bar, divider and 220px for the filter/list below the composer. */
 .memo-composer-expanded .memo-pending-images {
-  max-height: max(0px, calc(100dvh - var(--memo-input-panel-height) - 50px));
+  max-height: max(0px, calc(100dvh - var(--memo-input-panel-height) - 268px));
   overflow-y: auto;
 }
 
