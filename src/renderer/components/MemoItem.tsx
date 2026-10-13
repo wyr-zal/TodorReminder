@@ -49,8 +49,9 @@ const priorityLabel: Record<Priority, string> = {
   important: '重要', unimportant: '不重要'
 }
 
-// 长内容默认收起为 4 行，展开状态记在模块级（虚拟列表滚动重挂载不丢失）
-const CONTENT_CLAMP_LINES = 4
+// 长内容默认收起为 3 行，第三行由渐隐层半隐藏
+// 展开状态记在模块级，避免虚拟列表滚动重挂载后丢失
+const CONTENT_CLAMP_LINES = 3
 const expandedMemoIds = new Set<string>()
 
 type CopyState = 'idle' | 'copying' | 'success' | 'partial' | 'error'
@@ -160,7 +161,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     if (isEditing) adjustEditHeight()
   }, [isEditing, editContent, isFocused])
 
-  // 内容超过 4 行时截断：clamp 下 scrollHeight 仍是完整内容高度，统一按行高判定
+  // 内容超过 3 行时截断：clamp 下 scrollHeight 仍是完整内容高度，统一按行高判定
   const measureClamp = () => {
     const el = contentRef.current
     if (!el) return
@@ -617,7 +618,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
                 ref={contentRef}
                 className={`text-sm leading-relaxed break-words cursor-pointer whitespace-pre-wrap ${
                   memo.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'
-                } ${needsClamp && !isExpanded && !isFocused ? 'line-clamp-4' : ''}`}
+                } ${needsClamp && !isExpanded && !isFocused ? 'line-clamp-3' : ''}`}
                 onDoubleClick={startEditing}
               >
                 {memoContent}
