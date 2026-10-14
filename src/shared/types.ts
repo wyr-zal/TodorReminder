@@ -73,18 +73,22 @@ export interface WindowState {
   hiddenEdge: 'left' | 'right' | 'top' | null
 }
 
+export type FixedWindowPosition = 'left-center' | 'right-center' | 'top-center' | 'bottom-center'
+
 // 应用设置
 export interface AppSettings {
   imageCompression: boolean  // 是否压缩图片
   imageMaxSize: number       // 最大尺寸 KB
   imageMaxWidth: number      // 最大宽度 px
+  fixedPosition: FixedWindowPosition
   snipastePath?: string      // 本机 Snipaste 安装路径
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   imageCompression: true,
   imageMaxSize: 500,
-  imageMaxWidth: 1200
+  imageMaxWidth: 1200,
+  fixedPosition: 'right-center'
 }
 
 export type TagSortMode = 'latest' | 'count' | 'alpha'

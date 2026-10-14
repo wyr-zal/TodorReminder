@@ -24,7 +24,7 @@ import {
 import { initDatabase, closeDatabase, getCloudDatabase, getAllMemos, createMemo, updateMemo, deleteMemo, getDeletedMemos, restoreMemo, hardDeleteMemo, exportToJSON, inspectDatabaseFile } from './database'
 import { CloudController } from './cloudController'
 import { saveImage, getImageBase64, getImageBuffer, getExistingImagePath, deleteImage, exportImage, ensureThumbnail } from './image'
-import { constrainWindowBounds, loadWindowState, saveWindowState } from './window-state'
+import { constrainWindowBounds, getFixedPositionBounds, loadWindowState, saveWindowState } from './window-state'
 import { migrateStorageData, resolveStorageInfo } from './storage'
 import { createSnipastePreview, preserveSnipastePath } from './snipaste'
 
@@ -776,17 +776,15 @@ function registerShortcuts() {
   globalShortcut.register('Alt+Q', () => {
     if (mainWindow) {
       const display = screen.getPrimaryDisplay()
-      const { width: screenWidth, height: screenHeight } = display.workArea
       const bounds = mainWindow.getBounds()
-      const targetX = screenWidth - bounds.width - 20
-      const targetY = Math.round((screenHeight - bounds.height) / 2)
+      const target = getFixedPositionBounds(loadSettings().fixedPosition, bounds, display.workArea)
 
-      // 判断窗口是否已在固定位置且可见且聚焦
+      // 判断窗口是否已在当前固定位置且可见且聚焦
       const isAtFixedPosition = !windowState.isHidden
         && mainWindow.isVisible()
         && mainWindow.isFocused()
-        && Math.abs(bounds.x - targetX) < 5
-        && Math.abs(bounds.y - targetY) < 5
+        && Math.abs(bounds.x - target.x) < 5
+        && Math.abs(bounds.y - target.y) < 5
 
       if (isAtFixedPosition) {
         // 已激活且在固定位置，隐藏窗口
@@ -800,9 +798,7 @@ function registerShortcuts() {
         windowState.hiddenEdge = null
       }
 
-      // 移动到屏幕右侧中间位置
-      mainWindow.setBounds({ x: targetX, y: targetY })
-
+      mainWindow.setBounds(target)
       safeShow()
       safeFocus()
       mainWindow.webContents.send('window:focus-input')

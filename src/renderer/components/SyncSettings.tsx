@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { StorageInfo, TagSortMode } from '../../shared/types'
+import { FixedWindowPosition, StorageInfo, TagSortMode } from '../../shared/types'
 import { useMemoStore } from '../store/memoStore'
 import { getThemeMode, saveThemeMode, ThemeMode } from '../utils/theme'
 import type { CloudPreview, CloudStatus } from '../../shared/cloudTypes'
@@ -13,6 +13,7 @@ interface AppSettings {
   imageCompression: boolean
   imageMaxSize: number
   imageMaxWidth: number
+  fixedPosition: FixedWindowPosition
 }
 
 interface SyncSettingsProps {
@@ -38,6 +39,13 @@ const themeOptions: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: '跟随系统' },
   { value: 'light', label: '浅色' },
   { value: 'dark', label: '深色' }
+]
+
+const fixedPositionOptions: { value: FixedWindowPosition; label: string }[] = [
+  { value: 'left-center', label: '左侧居中' },
+  { value: 'right-center', label: '右侧居中' },
+  { value: 'top-center', label: '顶部居中' },
+  { value: 'bottom-center', label: '底部居中' }
 ]
 
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
@@ -84,7 +92,8 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
   const [settings, setSettings] = useState<AppSettings>({
     imageCompression: true,
     imageMaxSize: 500,
-    imageMaxWidth: 1200
+    imageMaxWidth: 1200,
+    fixedPosition: 'right-center'
   })
   const [status, setStatus] = useState<CloudStatus>({
     lastSync: null,
@@ -179,6 +188,12 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
   const handleSettingsSave = async () => {
     await window.electronAPI.settings.set(settings)
     showMessage('设置已保存')
+  }
+
+  const handleFixedPositionChange = async (fixedPosition: FixedWindowPosition) => {
+    const nextSettings = { ...settings, fixedPosition }
+    setSettings(nextSettings)
+    await window.electronAPI.settings.set(nextSettings)
   }
 
   const handleThemeChange = (mode: ThemeMode) => {
@@ -411,6 +426,32 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
                 <p className="text-[11px] text-slate-400 mt-2">跟随系统会在 Windows 切换主题时自动更新</p>
               </div>
 
+              <div className="pb-4 border-b border-slate-100">
+                <p className="text-[11px] font-medium text-slate-500 mb-2.5 tracking-wide uppercase">Alt+Q 固定呼出位置</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {fixedPositionOptions.map(option => {
+                    const active = settings.fixedPosition === option.value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => { void handleFixedPositionChange(option.value) }}
+                        aria-label={`固定位置：${option.label}`}
+                        aria-pressed={active}
+                        className={`rounded-lg border px-3 py-2.5 text-[12px] font-medium transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                            : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">下次按 Alt+Q 呼出时生效，设置自动保存</p>
+              </div>
+
               <div>
                 <p className="text-[11px] font-medium text-slate-500 mb-3 tracking-wide uppercase">标签排序方式</p>
                 <div className="space-y-2">
@@ -449,7 +490,7 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-400 pt-1">切换后立即生效，自动保存</p>
+              <p className="text-[11px] text-slate-400 pt-1">显示设置自动保存，固定位置下次按 Alt+Q 时生效</p>
             </div>
           )}
 

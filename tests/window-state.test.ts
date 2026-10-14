@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { constrainWindowBounds, loadWindowState, saveWindowState } from '../src/main/window-state.ts'
+import { constrainWindowBounds, getFixedPositionBounds, loadWindowState, saveWindowState } from '../src/main/window-state.ts'
 
 const DEFAULT_BOUNDS = { x: 100, y: 100, width: 480, height: 720 }
 const LIMITS = { minWidth: 280, minHeight: 300 }
@@ -47,6 +47,29 @@ test('constrainWindowBounds pulls off-screen bounds back into visible work area'
   )
 
   assert.deepEqual(bounds, { x: 700, y: 0, width: 900, height: 900 })
+})
+
+test('getFixedPositionBounds places each preset within the work area', () => {
+  const bounds = { x: 0, y: 0, width: 480, height: 720 }
+  const workArea = { x: 100, y: 50, width: 1600, height: 900 }
+  const positions = [
+    ['left-center', { x: 120, y: 140 }],
+    ['right-center', { x: 1200, y: 140 }],
+    ['top-center', { x: 660, y: 70 }],
+    ['bottom-center', { x: 660, y: 210 }]
+  ] as const
+
+  for (const [position, expected] of positions) {
+    assert.deepEqual(getFixedPositionBounds(position, bounds, workArea), expected)
+  }
+})
+
+test('getFixedPositionBounds rounds center coordinates and defaults unknown positions to the right', () => {
+  const bounds = { x: 0, y: 0, width: 480, height: 720 }
+  const workArea = { x: 0, y: 0, width: 1601, height: 901 }
+
+  assert.deepEqual(getFixedPositionBounds('top-center', bounds, workArea), { x: 561, y: 20 })
+  assert.deepEqual(getFixedPositionBounds('invalid' as never, bounds, workArea), { x: 1101, y: 91 })
 })
 
 test('saveWindowState persists full bounds', () => {

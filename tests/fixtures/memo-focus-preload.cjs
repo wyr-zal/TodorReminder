@@ -9,6 +9,7 @@ let memos = Array.from({ length: 120 }, (_, index) => ({
   createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 120 - index)).toISOString(),
   updatedAt: '2026-01-01T00:00:00.000Z', completedAt: null, deviceId: 'test', deleted: false
 }))
+let appSettings = { imageCompression: true, imageMaxSize: 500, imageMaxWidth: 1200, fixedPosition: 'right-center' }
 const calls = []
 let syncComplete
 let failDelete = false
@@ -39,12 +40,13 @@ const api = {
     copy: ok, copyPath: ok, get: async () => null
   },
   sync: { onComplete: callback => { syncComplete = callback; return () => {} }, getConfig: async () => ({ token: '', repo: '' }) },
-  settings: { get: async () => ({ autoLaunch: false, syncEnabled: false }), set: ok },
+  settings: { get: async () => ({ ...appSettings }), set: async settings => { appSettings = { ...settings }; return true } },
   storage: { getInfo: async () => ({ dataDir: 'fixture', attachmentsDir: 'fixture' }) }
 }
 contextBridge.exposeInMainWorld('electronAPI', api)
 contextBridge.exposeInMainWorld('memoTest', {
   calls: () => calls,
+  settings: () => ({ ...appSettings }),
   memos: () => memos,
   failDelete: value => { failDelete = value },
   replace: next => { memos = next; syncComplete?.({ success: true }) }

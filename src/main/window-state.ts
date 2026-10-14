@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import { dirname } from 'node:path'
+import type { FixedWindowPosition } from '../shared/types'
 
 export interface WindowBoundsState {
   x: number
@@ -64,6 +65,40 @@ export function constrainWindowBounds(
     y: clamp(bounds.y, workArea.y, maxY),
     width,
     height
+  }
+}
+
+export function getFixedPositionBounds(
+  position: FixedWindowPosition,
+  bounds: WindowBoundsState,
+  workArea: WorkAreaBounds
+): Pick<WindowBoundsState, 'x' | 'y'> {
+  const centerX = Math.round(workArea.x + (workArea.width - bounds.width) / 2)
+  const centerY = Math.round(workArea.y + (workArea.height - bounds.height) / 2)
+  let x = workArea.x + workArea.width - bounds.width - 20
+  let y = centerY
+
+  switch (position) {
+    case 'left-center':
+      x = workArea.x + 20
+      break
+    case 'right-center':
+      break
+    case 'top-center':
+      x = centerX
+      y = workArea.y + 20
+      break
+    case 'bottom-center':
+      x = centerX
+      y = workArea.y + workArea.height - bounds.height - 20
+      break
+    default:
+      break
+  }
+
+  return {
+    x: clamp(Math.round(x), workArea.x, workArea.x + Math.max(workArea.width - bounds.width, 0)),
+    y: clamp(Math.round(y), workArea.y, workArea.y + Math.max(workArea.height - bounds.height, 0))
   }
 }
 
