@@ -157,9 +157,34 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     }
   }
 
+  // 记录卡片顶边在滚动视口内的位置，布局变化后对齐回原位
+  const captureCardAnchor = () => {
+    if (cardRef.current) {
+      const scrollParent = getScrollParent(cardRef.current)
+      if (scrollParent) {
+        const parentRect = scrollParent.getBoundingClientRect()
+        const parentStyle = window.getComputedStyle(scrollParent)
+        const viewportTop = parentRect.top + scrollParent.clientTop + (parseFloat(parentStyle.paddingTop) || 0)
+        pendingCardAnchorRef.current = {
+          card: cardRef.current,
+          scrollParent,
+          viewportTop: Math.max(cardRef.current.getBoundingClientRect().top, viewportTop)
+        }
+      }
+    }
+  }
+
+  // 编辑态内容高度变化（如贴入长文本）时锁住卡片视口位置：
+  // 先记录卡片顶边锚点，布局后对齐，防止长内容撑高导致页面跳走
   useLayoutEffect(() => {
-    if (isEditing) adjustEditHeight()
-  }, [isEditing, editContent, isFocused])
+    if (!isEditing) return
+    const card = cardRef.current
+    if (!card) return
+    const heightBefore = card.getBoundingClientRect().height
+    adjustEditHeight()
+    const heightAfter = card.getBoundingClientRect().height
+    if (Math.abs(heightAfter - heightBefore) > 1) captureCardAnchor()
+  }, [isEditing, editContent])
 
   // 内容超过 3 行时截断：clamp 下 scrollHeight 仍是完整内容高度，统一按行高判定
   const measureClamp = () => {
@@ -190,7 +215,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     alignCard()
     const frame = window.requestAnimationFrame(alignCard)
     return () => window.cancelAnimationFrame(frame)
-  }, [isExpanded, isEditing])
+  }, [isExpanded, isEditing, editContent])
 
   // 窗口宽度变化会改变换行数，跟随元素尺寸重测
   useEffect(() => {
@@ -200,22 +225,6 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
-
-  const captureCardAnchor = () => {
-    if (cardRef.current) {
-      const scrollParent = getScrollParent(cardRef.current)
-      if (scrollParent) {
-        const parentRect = scrollParent.getBoundingClientRect()
-        const parentStyle = window.getComputedStyle(scrollParent)
-        const viewportTop = parentRect.top + scrollParent.clientTop + (parseFloat(parentStyle.paddingTop) || 0)
-        pendingCardAnchorRef.current = {
-          card: cardRef.current,
-          scrollParent,
-          viewportTop: Math.max(cardRef.current.getBoundingClientRect().top, viewportTop)
-        }
-      }
-    }
-  }
 
   const scrollToEnd = () => {
     const card = cardRef.current
@@ -454,7 +463,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
   }
 
-  const hasImage = memo.type === 'image' && memo.attachments.length > 0
+  const hasImage = memo.attachments.length > 0
   // 虚拟列表滚动时条目会重新挂载，入场动画只给新建的备忘播放
   const isFreshMemo = Date.now() - new Date(memo.createdAt).getTime() < 1500
   const copyLabel = copyState === 'copying'
@@ -480,6 +489,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
       <div
         ref={cardRef}
         data-memo-id={memo.id}
+        style={{ overflowAnchor: 'none' }}
         className={`group relative flex gap-2.5 px-3 py-2.5 bg-white rounded-xl border border-slate-100 shadow-card hover:border-slate-200 hover:shadow-card-hover transition-all duration-200 ${
           isFocused ? 'memo-focus-card' : isFreshMemo ? 'animate-card-in' : ''
         } ${

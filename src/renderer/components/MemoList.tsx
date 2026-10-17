@@ -22,6 +22,16 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [focusSnapshot, setFocusSnapshot] = useState<{ ids: string[]; scrollTop: number } | null>(null)
   const [editingMemos, setEditingMemos] = useState<Record<string, Memo>>({})
+  const scrollAnimRef = useRef<number | null>(null)
+  // 记录上一帧各行几何，行消失（删除/远端同步）时补偿 scrollTop 保持视口连续
+  const prevRowsRef = useRef<{ ids: string[]; rects: Map<string, { top: number; height: number }>; scrollTop: number } | null>(null)
+
+  const cancelScrollAnim = () => {
+    if (scrollAnimRef.current !== null) {
+      window.cancelAnimationFrame(scrollAnimRef.current)
+      scrollAnimRef.current = null
+    }
+  }
   const handleEditingChange = useCallback((memo: Memo | null, id: string) => {
     setEditingMemos(current => {
       if (memo) return { ...current, [id]: memo }
@@ -116,6 +126,41 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     if (editingOutsideIndex >= 0) rowVirtualizer.scrollToIndex(editingOutsideIndex, { align: 'auto' })
   }, [editingOutsideIndex])
 
+  // 删除/远端同步移除行后保持视口连续：被移除行原位于视口内或其上方时，
+  // 把 scrollTop 收缩对应高度，防止下方内容突然上跳（absolute 布局浏览器无法自动锚定）
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const prev = prevRowsRef.current
+    const rects = new Map<string, { top: number; height: number }>()
+    for (const item of rowVirtualizer.getVirtualItems()) {
+      const node = el.querySelector(`[data-index="${item.index}"]`)
+      if (node) rects.set(String(displayedMemos[item.index]?.id), { top: node.getBoundingClientRect().top, height: node.getBoundingClientRect().height })
+    }
+    if (prev) {
+      const ids = new Set(rects.keys())
+      const removed = [...prev.rects.entries()].filter(([id]) => !ids.has(id))
+      // 关键判定：行真的被移除（不是虚拟回收）。虚拟回收时 same-key 行仍在 displayedMemos
+      const trulyRemoved = removed.filter(([id]) => displayedMemos.some(memo => memo.id === id) === false)
+      if (trulyRemoved.length && !focusedMemoId) {
+        const viewportTop = el.getBoundingClientRect().top
+        let pull = 0
+        for (const [, rect] of trulyRemoved) {
+          if (rect.top >= viewportTop) continue
+          // 行整体在视口顶边上方：下方内容被上抽该行全部高度（含行距）
+          if (rect.top + rect.height <= viewportTop) pull += rect.height + 6
+          // 行部分可见（跨视口顶边）：上方保留部分仍占位，只需补偿视口内消失的部分
+          else pull += viewportTop - rect.top
+        }
+        if (pull > 1) {
+          cancelScrollAnim()
+          el.scrollTop = Math.max(0, el.scrollTop - pull)
+        }
+      }
+    }
+    prevRowsRef.current = { ids: [...rects.keys()], rects, scrollTop: el.scrollTop }
+  })
+
   const clearHideTimer = () => {
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current)
@@ -140,6 +185,12 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   const handleScroll = () => {
     const el = listRef.current
     if (!el) return
+
+    // 回到顶部动画进行中：跳过按钮状态逻辑，避免 setState 重渲染干扰动画
+    if (scrollAnimRef.current !== null) {
+      lastScrollTopRef.current = el.scrollTop
+      return
+    }
 
     const currentTop = el.scrollTop
     const isScrollable = el.scrollHeight > el.clientHeight + 1
@@ -166,13 +217,30 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     lastScrollTopRef.current = currentTop
   }
 
+  // 回到顶部：不用浏览器 smooth——虚拟列表深处的未测量行会让 smooth 中途被打断，
+  // 用 rAF 手写缓动，期间跳过按钮自动隐藏逻辑
   const handleScrollToTop = () => {
-    listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    const el = listRef.current
+    if (!el) return
+    cancelScrollAnim()
     resetScrollTopButton()
+    const start = el.scrollTop
+    if (start <= 0) return
+    const duration = Math.min(600, Math.max(200, start * 0.35))
+    const t0 = performance.now()
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - t0) / duration)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      el.scrollTop = start * (1 - eased)
+      if (progress < 1) scrollAnimRef.current = window.requestAnimationFrame(step)
+      else scrollAnimRef.current = null
+    }
+    scrollAnimRef.current = window.requestAnimationFrame(step)
   }
 
   useEffect(() => {
     const el = listRef.current
+    cancelScrollAnim()
     if (el) {
       lastScrollTopRef.current = el.scrollTop
     }
@@ -180,7 +248,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   }, [filter, priorityFilter, tagFilter, sortedMemos.length])
 
   useEffect(() => {
-    return () => clearHideTimer()
+    return () => { cancelScrollAnim(); clearHideTimer() }
   }, [])
 
   return (

@@ -39,6 +39,7 @@ app.whenReady().then(async () => {
   win.showInactive()
   await wait(`document.querySelectorAll('[aria-label="全屏展开"]').length > 0`)
   await wait(`!!document.querySelector('[data-memo-id="memo-0"]')`)
+  await wait(`document.querySelectorAll('[data-memo-id="memo-0"] img').length === 2`)
   const inputBeforeAttachments = await js(`(() => {
     const textarea = document.querySelector('.memo-input-panel textarea')
     const listShell = document.querySelector('.memo-list-shell')
