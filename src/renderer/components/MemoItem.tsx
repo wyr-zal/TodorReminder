@@ -303,14 +303,22 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
     if (editContent.trim() || editAttachments.length > 0) {
       const { content, tags } = parseTagsFromContent(editContent)
       setEditSaving(true)
-      const saved = await updateMemo(memo.id, {
-        content: editAttachments.length > 0 ? content : content || memo.content,
-        tags,
-        attachments: editAttachments,
-        type: editAttachments.length > 0 ? 'image' : 'text'
-      }, editBaseline.current ?? undefined)
-      setEditSaving(false)
-      if (!saved) { setEditError('保存失败或待办已变化，草稿已保留；请取消后重新核对。'); return }
+      let saved = false
+      try {
+        saved = await updateMemo(memo.id, {
+          content: editAttachments.length > 0 ? content : content || memo.content,
+          tags,
+          attachments: editAttachments,
+          type: editAttachments.length > 0 ? 'image' : 'text'
+        }, editBaseline.current ?? undefined)
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : '未知错误'
+        setEditError(`保存失败：${reason}。草稿仍在编辑框中，请先复制再取消。`)
+        return
+      } finally {
+        setEditSaving(false)
+      }
+      if (!saved) { setEditError('待办不存在或已删除；草稿仍在编辑框中，请先复制。'); return }
     }
     captureCardAnchor()
     setIsEditing(false)

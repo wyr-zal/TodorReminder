@@ -152,7 +152,7 @@ export function updateMemo(id: string, updates: Partial<Memo>, expected?: Memo):
   const existing = getMemoById(id)
   if (!existing) return null
   if (expected) {
-    const baseline = (m: Memo) => JSON.stringify([m.id, m.content, m.type, m.priority, m.status, m.attachments, m.tags, m.updatedAt, m.completedAt, m.deleted, m.syncVersion ?? null])
+    const baseline = (m: Memo) => JSON.stringify([m.id, m.content, m.type, m.priority, m.status, m.attachments, m.tags, m.updatedAt, m.completedAt, m.deleted])
     if (baseline(existing) !== baseline(expected)) throw new Error('待办已发生变化，草稿未保存；请取消编辑后重新核对')
   }
 

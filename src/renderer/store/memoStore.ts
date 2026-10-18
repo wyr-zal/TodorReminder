@@ -118,8 +118,11 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       return true
     } catch (error) {
       console.error('Failed to update memo:', error)
-      if (expected) await get().loadMemos()
-      else set({ memos: oldMemos })
+      if (expected) {
+        await get().loadMemos()
+        throw error
+      }
+      set({ memos: oldMemos })
       return false
     }
   },

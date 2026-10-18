@@ -7,6 +7,7 @@ import FilterBar from './FilterBar'
 
 // 列表状态分档：进行中置顶，未开始次之，已完成沉底
 const STATUS_RANK: Record<MemoStatus, number> = { in_progress: 0, not_started: 1, completed: 2 }
+const SCROLL_TOP_REVEAL_INDEX = 3
 
 interface MemoListProps {
   focusedMemoId: string | null
@@ -16,9 +17,6 @@ interface MemoListProps {
 function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   const { memos, filter, priorityFilter, tagFilter } = useMemoStore()
   const listRef = useRef<HTMLDivElement>(null)
-  const scrollStartAtRef = useRef<number | null>(null)
-  const lastScrollTopRef = useRef(0)
-  const hideTimerRef = useRef<number | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [focusSnapshot, setFocusSnapshot] = useState<{ ids: string[]; scrollTop: number } | null>(null)
   const [editingMemos, setEditingMemos] = useState<Record<string, Memo>>({})
@@ -122,6 +120,22 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     rangeExtractor
   })
 
+  const handleListScroll = () => {
+    const el = listRef.current
+    if (!el) return
+    if (el.scrollTop <= 0) {
+      setShowScrollTop(false)
+      return
+    }
+    if ((rowVirtualizer.getVirtualItemForOffset(el.scrollTop)?.index ?? 0) >= SCROLL_TOP_REVEAL_INDEX) {
+      setShowScrollTop(true)
+    }
+  }
+
+  useEffect(() => {
+    setShowScrollTop(false)
+  }, [filter, priorityFilter, tagFilter, focusedMemoId])
+
   useEffect(() => {
     if (editingOutsideIndex >= 0) rowVirtualizer.scrollToIndex(editingOutsideIndex, { align: 'auto' })
   }, [editingOutsideIndex])
@@ -161,69 +175,12 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     prevRowsRef.current = { ids: [...rects.keys()], rects, scrollTop: el.scrollTop }
   })
 
-  const clearHideTimer = () => {
-    if (hideTimerRef.current !== null) {
-      window.clearTimeout(hideTimerRef.current)
-      hideTimerRef.current = null
-    }
-  }
-
-  const resetScrollTopButton = () => {
-    clearHideTimer()
-    scrollStartAtRef.current = null
-    setShowScrollTop(false)
-  }
-
-  const scheduleHideScrollTopButton = () => {
-    clearHideTimer()
-    hideTimerRef.current = window.setTimeout(() => {
-      setShowScrollTop(false)
-      hideTimerRef.current = null
-    }, 2000)
-  }
-
-  const handleScroll = () => {
-    const el = listRef.current
-    if (!el) return
-
-    // 回到顶部动画进行中：跳过按钮状态逻辑，避免 setState 重渲染干扰动画
-    if (scrollAnimRef.current !== null) {
-      lastScrollTopRef.current = el.scrollTop
-      return
-    }
-
-    const currentTop = el.scrollTop
-    const isScrollable = el.scrollHeight > el.clientHeight + 1
-    const isScrollingDown = currentTop > lastScrollTopRef.current
-
-    if (!isScrollable || currentTop <= 0) {
-      lastScrollTopRef.current = currentTop
-      resetScrollTopButton()
-      return
-    }
-
-    if (isScrollingDown) {
-      const now = window.performance.now()
-      scrollStartAtRef.current ??= now
-
-      if (now - scrollStartAtRef.current >= 2000) {
-        setShowScrollTop(true)
-        scheduleHideScrollTopButton()
-      }
-    } else if (currentTop < lastScrollTopRef.current) {
-      scrollStartAtRef.current = null
-    }
-
-    lastScrollTopRef.current = currentTop
-  }
-
-  // 回到顶部：不用浏览器 smooth——虚拟列表深处的未测量行会让 smooth 中途被打断，
-  // 用 rAF 手写缓动，期间跳过按钮自动隐藏逻辑
+  // 回到顶部：不用浏览器 smooth——虚拟列表深处的未测量行会让 smooth 中途被打断。
+  // 用 rAF 手写缓动，避免动画被布局抖动打断。
   const handleScrollToTop = () => {
     const el = listRef.current
     if (!el) return
     cancelScrollAnim()
-    resetScrollTopButton()
     const start = el.scrollTop
     if (start <= 0) return
     const duration = Math.min(600, Math.max(200, start * 0.35))
@@ -239,16 +196,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   }
 
   useEffect(() => {
-    const el = listRef.current
-    cancelScrollAnim()
-    if (el) {
-      lastScrollTopRef.current = el.scrollTop
-    }
-    resetScrollTopButton()
-  }, [filter, priorityFilter, tagFilter, sortedMemos.length])
-
-  useEffect(() => {
-    return () => { cancelScrollAnim(); clearHideTimer() }
+    return () => { cancelScrollAnim() }
   }, [])
 
   return (
@@ -256,7 +204,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
       <FilterBar />
 
       <div className="relative flex-1 min-h-0">
-        <div ref={listRef} onScroll={handleScroll} className="h-full overflow-y-auto px-3 py-2.5">
+        <div ref={listRef} onScroll={handleListScroll} className="h-full overflow-y-auto px-3 py-2.5">
           {displayedMemos.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 select-none">
               <svg className="w-10 h-10 text-slate-200" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -302,7 +250,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
             onClick={handleScrollToTop}
             aria-label="返回顶部"
             title="返回顶部"
-            className="absolute right-4 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-500 shadow-lg shadow-slate-200/70 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 hover:shadow-indigo-100 active:translate-y-0 cursor-pointer"
+            className="fixed right-4 bottom-10 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/90 text-slate-500 shadow-lg shadow-slate-200/70 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 hover:shadow-indigo-100 active:translate-y-0 cursor-pointer"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 19V5" />
