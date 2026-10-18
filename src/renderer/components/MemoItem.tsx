@@ -568,60 +568,19 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
           {isEditing ? (
             <div className="space-y-2">
               {editError && <p role="alert" className="text-[12px] text-rose-500">{editError}</p>}
-              <div className="flex items-start gap-2">
-                <textarea
-                  ref={editTextareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave() }
-                    else if (e.key === 'Escape') cancelEditing()
-                  }}
-                  onPaste={handleEditPaste}
-                  className="flex-1 min-w-0 px-2.5 py-1.5 text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 resize-none overflow-hidden"
-                  style={{ minHeight: '32px', whiteSpace: 'pre-wrap' }}
-                  autoFocus
-                />
-                <div className="flex-shrink-0 flex flex-col items-center gap-0.5">
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={editSaving}
-                    className="p-1.5 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer"
-                    aria-label="保存待办"
-                    title="保存"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer"
-                    aria-label="添加图片"
-                    title="添加图片"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <path d="M21 15l-5-5L5 21" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelEditing}
-                    className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                    aria-label="取消编辑"
-                    title="取消"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
+              <textarea
+                ref={editTextareaRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave() }
+                  else if (e.key === 'Escape') cancelEditing()
+                }}
+                onPaste={handleEditPaste}
+                className="w-full min-w-0 px-2.5 py-1.5 text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 resize-none overflow-hidden"
+                style={{ minHeight: '32px', whiteSpace: 'pre-wrap' }}
+                autoFocus
+              />
               {editAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {editAttachments.map((filename) => (
@@ -824,6 +783,47 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
                   <path d="M10 11v6M14 11v6" />
+                </svg>
+              </button>
+            </>
+          )}
+          {isEditing && (
+            <>
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={editSaving}
+                className="p-1.5 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer"
+                aria-label="保存待办"
+                title="保存"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer"
+                aria-label="添加图片"
+                title="添加图片"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={cancelEditing}
+                className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                aria-label="取消编辑"
+                title="取消"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
             </>
