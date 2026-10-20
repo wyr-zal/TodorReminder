@@ -1,8 +1,13 @@
 import { create } from 'zustand'
-import { Memo, Priority, MemoStatus, TagSortMode } from '../../shared/types'
+import type { Memo, Priority, MemoStatus, TagSortMode } from '../../shared/types'
 import { v4 as uuidv4 } from 'uuid'
 
 const TAG_SORT_KEY = 'memo-tag-sort'
+const DEFAULT_TAG = 'TODO'
+
+function normalizeTags(tags?: string[]): string[] {
+  return tags?.length ? tags : [DEFAULT_TAG]
+}
 
 function getSavedTagSort(): TagSortMode {
   const v = localStorage.getItem(TAG_SORT_KEY)
@@ -54,6 +59,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
 
   addMemo: async (content: string, priority: Priority = 'unimportant', tags: string[] = []) => {
     const now = new Date().toISOString()
+    const normalizedTags = normalizeTags(tags)
     const newMemo: Memo = {
       id: uuidv4(),
       content,
@@ -61,7 +67,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       priority,
       status: 'not_started',
       attachments: [],
-      tags,
+      tags: normalizedTags,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
@@ -79,6 +85,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
 
   addImageMemo: async (content: string, priority: Priority, imageFilenames: string[], tags: string[] = []) => {
     const now = new Date().toISOString()
+    const normalizedTags = normalizeTags(tags)
     const newMemo: Memo = {
       id: uuidv4(),
       content,
@@ -86,7 +93,7 @@ export const useMemoStore = create<MemoState>((set, get) => ({
       priority,
       status: 'not_started',
       attachments: imageFilenames,
-      tags,
+      tags: normalizedTags,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
@@ -103,16 +110,19 @@ export const useMemoStore = create<MemoState>((set, get) => ({
   },
 
   updateMemo: async (id: string, updates: Partial<Memo>, expected?: Memo) => {
+    const normalizedUpdates = Object.prototype.hasOwnProperty.call(updates, 'tags')
+      ? { ...updates, tags: normalizeTags(updates.tags) }
+      : updates
     const oldMemos = get().memos
     set((state) => ({
       memos: state.memos.map((memo) =>
         memo.id === id
-          ? { ...memo, ...updates, updatedAt: new Date().toISOString() }
+          ? { ...memo, ...normalizedUpdates, updatedAt: new Date().toISOString() }
           : memo
       )
     }))
     try {
-      const saved = await window.electronAPI.memo.update(id, updates, expected)
+      const saved = await window.electronAPI.memo.update(id, normalizedUpdates, expected)
       if (!saved) throw new Error('待办不存在或已删除')
       await get().loadMemos()
       return true
