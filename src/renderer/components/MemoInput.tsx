@@ -65,7 +65,7 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSubmit()
     } else if (e.key === 'Tab') {
@@ -182,12 +182,11 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
           ref={inputRef as RefObject<HTMLTextAreaElement>}
           value={content}
           onChange={(e) => {
-            const cleaned = e.target.value.replace(/\n{2,}/g, '\n')
-            setContent(cleaned)
+            setContent(e.target.value)
           }}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={pendingImages.length > 0 ? '添加说明… Enter 保存' : '记录想法… Tab 切换重要等级'}
+          placeholder={pendingImages.length > 0 ? '添加说明… Shift+Enter 保存' : '记录想法… Shift+Enter 保存 · Tab 切换重要等级'}
           className="h-full min-h-0 flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-400 focus:bg-white transition-all resize-none font-inter w-full"
           style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
         />

@@ -573,7 +573,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave() }
+                  if (e.key === 'Enter' && e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSave() }
                   else if (e.key === 'Escape') cancelEditing()
                 }}
                 onPaste={handleEditPaste}
