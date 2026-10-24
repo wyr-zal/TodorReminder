@@ -60,8 +60,31 @@ func TestMemoHTTP(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if receipt.ID != testID || repo.operation != testOp || repo.input.Priority != "unimportant" || repo.input.Status != "not_started" || repo.input.Tags == nil {
+	if receipt.ID != testID || repo.operation != testOp || repo.input.Priority != "unimportant" || repo.input.Status != "not_started" || len(repo.input.Tags) != 1 || repo.input.Tags[0] != "TODO" {
 		t.Fatalf("bad create normalization: %+v", repo.input)
+	}
+	for _, test := range []struct {
+		name string
+		body string
+		want []string
+	}{
+		{name: "empty tags", body: `{"content":"hello","tags":[]}`, want: []string{"TODO"}},
+		{name: "custom tags", body: `{"content":"hello","tags":["BUG"]}`, want: []string{"BUG"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			w := request(s, "POST", "/api/v1/memos", test.body, testOp)
+			if w.Code != 201 {
+				t.Fatalf("create: %d %s", w.Code, w.Body.String())
+			}
+			if len(repo.input.Tags) != len(test.want) {
+				t.Fatalf("tags = %#v, want %#v", repo.input.Tags, test.want)
+			}
+			for i, tag := range test.want {
+				if repo.input.Tags[i] != tag {
+					t.Fatalf("tags = %#v, want %#v", repo.input.Tags, test.want)
+				}
+			}
+		})
 	}
 	w = request(s, "GET", "/api/v1/memos/"+testID, "", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "hello") {

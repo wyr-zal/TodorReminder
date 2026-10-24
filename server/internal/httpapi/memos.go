@@ -53,8 +53,8 @@ func normalize(input *store.CreateMemoRequest) bool {
 	if input.Status != "not_started" && input.Status != "in_progress" && input.Status != "completed" {
 		return false
 	}
-	if input.Tags == nil {
-		input.Tags = []string{}
+	if len(input.Tags) == 0 {
+		input.Tags = []string{"TODO"}
 	}
 	if input.AttachmentIDs == nil {
 		input.AttachmentIDs = []string{}
