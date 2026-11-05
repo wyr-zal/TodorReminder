@@ -28,7 +28,7 @@ const priorityConfig: Record<Priority, { label: string; barClass: string; textCl
 }
 
 function parseTagsFromContent(text: string): { content: string; tags: string[] } {
-  const tagRegex = /#([一-龥\w]+)/g
+  const tagRegex = /#([一-龥\w-]+)/g
   const tags: string[] = []
   let match
   while ((match = tagRegex.exec(text)) !== null) {
