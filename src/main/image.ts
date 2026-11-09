@@ -107,6 +107,10 @@ export function getImageBuffer(filename: string): Buffer | null {
 }
 
 export function deleteImage(filename: string): boolean {
+  if (typeof filename !== 'string' || filename === '.' || filename === '..' || basename(filename) !== filename) {
+    throw new Error('Invalid image filename')
+  }
+
   const thumbPath = getThumbnailPath(filename)
   if (fs.existsSync(thumbPath)) {
     fs.unlinkSync(thumbPath)

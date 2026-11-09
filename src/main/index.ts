@@ -1107,7 +1107,8 @@ function setupIPC() {
 
   ipcMain.handle('image:delete', async (_, filename: string) => {
     if (await getCloudDatabase().isImageReferenced(filename)) return false
-    return deleteImage(filename)
+    deleteImage(filename)
+    return true
   })
 
   ipcMain.handle('image:copy', (_, filename: string) => {
