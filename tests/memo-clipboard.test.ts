@@ -129,6 +129,36 @@ test('invalid or unrelated HTML is ignored', () => {
   assert.equal(parseMemoClipboardHtml('<!--focus-memo:v1:not-json-->'), null)
 })
 
+test('incomplete structured image sets are rejected with an explicit parse status', () => {
+  const payload = createMemoClipboardPayload('图片不可丢失', 'unimportant', [], 2)
+  const first = image(0).dataUrl
+  const second = image(1).dataUrl
+  const cases = [
+    `<img data-focus-memo-image="0" src="${first}">`,
+    `<img data-focus-memo-image="1" src="${second}">`,
+    `<img data-focus-memo-image="0" src="${first}"><img data-focus-memo-image="2" src="${second}">`,
+    `<img data-focus-memo-image="0" src="${first}"><img data-focus-memo-image="0" src="${second}"><img data-focus-memo-image="1" src="${second}">`
+  ]
+
+  for (const imageHtml of cases) {
+    const html = `<!--focus-memo:v1:${encodeURIComponent(JSON.stringify(payload))}-->${imageHtml}`
+    const parsed = parseMemoClipboardHtml(html)
+    assert.ok(parsed?.imageSetIncomplete)
+  }
+
+  const zeroImagePayload = createMemoClipboardPayload('无图', 'unimportant', [], 0)
+  const emptyImages = parseMemoClipboardHtml(
+    `<!--focus-memo:v1:${encodeURIComponent(JSON.stringify(zeroImagePayload))}--><p>无图</p>`
+  )
+  assert.deepEqual(emptyImages?.images, [])
+  assert.equal(emptyImages?.imageSetIncomplete, undefined)
+
+  const unexpectedImage = parseMemoClipboardHtml(
+    `<!--focus-memo:v1:${encodeURIComponent(JSON.stringify(zeroImagePayload))}--><img data-focus-memo-image="0" src="${first}">`
+  )
+  assert.ok(unexpectedImage?.imageSetIncomplete, 'imageCount 为 0 却包含图片也必须拒绝')
+})
+
 test('metadata remains readable when an external HTML pipeline strips comments', () => {
   const payload = createMemoClipboardPayload('保留元数据', 'unimportant', ['兼容'], 1)
   const html = buildMemoClipboardFormats(payload, [image(0)]).html

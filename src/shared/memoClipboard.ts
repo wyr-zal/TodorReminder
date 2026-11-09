@@ -18,6 +18,7 @@ export interface MemoClipboardFormats {
 export interface ParsedMemoClipboard {
   payload: MemoClipboardPayloadV1
   images: string[]
+  imageSetIncomplete?: boolean
 }
 
 export interface TextInsertionResult {
@@ -244,11 +245,12 @@ export function parseMemoClipboardHtml(html: string): ParsedMemoClipboard | null
   })
 
   indexedImages.sort((left, right) => left.index - right.index)
+  const hasCompleteImageSet = indexedImages.length === payload.imageCount
+    && indexedImages.every((image, index) => image.index === index)
 
   return {
     payload,
-    images: indexedImages
-      .slice(0, payload.imageCount)
-      .map((image) => image.dataUrl)
+    images: indexedImages.map((image) => image.dataUrl),
+    ...(!hasCompleteImageSet ? { imageSetIncomplete: true } : {})
   }
 }

@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect, RefObject, KeyboardEvent, ClipboardEvent } from 'react'
+import { useState, useRef, useEffect, RefObject, ChangeEvent, KeyboardEvent, ClipboardEvent } from 'react'
 import { useMemoStore } from '../store/memoStore'
 import { Priority } from '../../shared/types'
 import { formatMemoText, insertTextAtSelection } from '../../shared/memoClipboard'
 import {
+  ClipboardImageSaveError,
   readStructuredMemoClipboard,
   restoreTextareaSelection,
-  saveClipboardImages
+  saveClipboardImagesStrict
 } from '../utils/memoPaste'
 import { thumbImageUrl } from '../utils/imageUrl'
+import { breakInlineTags } from '../utils/tagLineBreak'
 import {
   IDLE_IMAGE_COPY,
   ImageCopyFeedback,
@@ -42,6 +44,9 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
   const [content, setContent] = useState('')
   const [priority, setPriority] = useState<Priority>('unimportant')
   const [pendingImages, setPendingImages] = useState<string[]>([])
+  const [pasteError, setPasteError] = useState('')
+  const [pasteCleanupFiles, setPasteCleanupFiles] = useState<string[]>([])
+  const [pasteCleanupPending, setPasteCleanupPending] = useState(false)
   const { addMemo, addImageMemo } = useMemoStore()
   const textareaHeight = Math.max(1, inputPanelHeight - 21)
 
@@ -53,6 +58,7 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
     if (!content.trim() && pendingImages.length === 0) return
 
     const { content: cleanContent, tags } = parseTagsFromContent(content)
+    if (pasteCleanupFiles.length === 0) setPasteError('')
 
     if (pendingImages.length > 0) {
       await addImageMemo(cleanContent, priority, pendingImages, tags)
@@ -61,6 +67,8 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
       addMemo(cleanContent, priority, tags)
     }
     setContent('')
+    setPasteError('')
+    setPasteCleanupFiles([])
     inputRef.current?.focus()
   }
 
@@ -74,7 +82,26 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
     } else if (e.key === 'Escape') {
       setContent('')
       setPendingImages([])
+      setPasteError('')
+      setPasteCleanupFiles([])
       inputRef.current?.blur()
+    }
+  }
+
+  const handleContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget
+    const nextValue = textarea.value
+    setPasteError('')
+
+    if ((e.nativeEvent as InputEvent).isComposing || !nextValue.includes('#')) {
+      setContent(nextValue)
+      return
+    }
+
+    const adjusted = breakInlineTags(nextValue, textarea.selectionStart)
+    setContent(adjusted.value)
+    if (adjusted.value !== nextValue) {
+      restoreTextareaSelection(textarea, adjusted.caret)
     }
   }
 
@@ -84,8 +111,15 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
     const selectionEnd = textarea.selectionEnd
     const structuredMemo = readStructuredMemoClipboard(e.clipboardData)
 
+    if (structuredMemo?.imageSetIncomplete) {
+      e.preventDefault()
+      setPasteError('剪贴板图片数据不完整，内容未粘贴。请重新复制后重试。')
+      return
+    }
+
     if (structuredMemo) {
       e.preventDefault()
+      setPasteError('')
       const pastedText = formatMemoText(
         structuredMemo.payload.content,
         structuredMemo.payload.tags
@@ -97,16 +131,23 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
         selectionEnd
       )
       const shouldRestorePriority = content.trim().length === 0 && pendingImages.length === 0
+      const adjusted = breakInlineTags(insertion.value, insertion.caret)
 
-      setContent(insertion.value)
+      setContent(adjusted.value)
       if (shouldRestorePriority) {
         setPriority(structuredMemo.payload.priority)
       }
-      restoreTextareaSelection(textarea, insertion.caret)
+      restoreTextareaSelection(textarea, adjusted.caret)
 
-      const filenames = await saveClipboardImages(structuredMemo.images)
-      if (filenames.length > 0) {
-        setPendingImages((previous) => [...previous, ...filenames])
+      try {
+        const filenames = await saveClipboardImagesStrict(structuredMemo.images)
+        if (filenames.length > 0) setPendingImages(previous => [...previous, ...filenames])
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '未知错误'
+        const cleanupFiles = error instanceof ClipboardImageSaveError ? error.uncommittedFilenames : []
+        setPasteCleanupFiles(cleanupFiles)
+        const cleanupDetails = cleanupFiles.length > 0 ? ` 未能清理的图片：${cleanupFiles.join(', ')}` : ''
+        setPasteError(`粘贴图片失败：${message}${cleanupDetails}`)
       }
       return
     }
@@ -145,6 +186,26 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
     setPendingImages(prev => prev.filter(f => f !== filename))
   }
 
+  const retryPasteCleanup = async () => {
+    if (pasteCleanupPending || pasteCleanupFiles.length === 0) return
+    setPasteCleanupPending(true)
+    try {
+      const results = await Promise.all(pasteCleanupFiles.map(async filename => {
+        try {
+          return { filename, deleted: await window.electronAPI.image.delete(filename) }
+        } catch {
+          return { filename, deleted: false }
+        }
+      }))
+      const remaining = results.filter(result => !result.deleted).map(result => result.filename)
+      setPasteCleanupFiles(remaining)
+      if (remaining.length === 0) setPasteError('')
+      else setPasteError(`仍有 ${remaining.length} 张图片未能清理：${remaining.join(', ')}`)
+    } finally {
+      setPasteCleanupPending(false)
+    }
+  }
+
   const openPendingImage = (filename: string) => {
     return window.electronAPI.image.preview(filename)
   }
@@ -167,6 +228,16 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
         </div>
       )}
 
+      {pasteError && (
+        <p role="alert" className="mb-1 flex items-center gap-2 text-[11px] text-rose-500">
+          <span>{pasteError}</span>
+          {pasteCleanupFiles.length > 0 && (
+            <button type="button" onClick={retryPasteCleanup} disabled={pasteCleanupPending} aria-label="重试清理" className="underline cursor-pointer disabled:cursor-wait">
+              {pasteCleanupPending ? '清理中…' : '重试清理'}
+            </button>
+          )}
+        </p>
+      )}
       <div className="flex items-stretch gap-2 flex-shrink-0" style={{ height: textareaHeight }}>
         {/* 优先级竖条 + 点击切换 */}
         <button
@@ -181,9 +252,7 @@ function MemoInput({ inputRef, inputPanelHeight, onPendingImagesChange }: MemoIn
         <textarea
           ref={inputRef as RefObject<HTMLTextAreaElement>}
           value={content}
-          onChange={(e) => {
-            setContent(e.target.value)
-          }}
+          onChange={handleContentChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={pendingImages.length > 0 ? '添加说明… Shift+Enter 保存' : '记录想法… Shift+Enter 保存 · Tab 切换重要等级'}
