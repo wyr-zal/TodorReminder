@@ -110,6 +110,11 @@ func (s *MySQL) ChangeMemo(ctx context.Context, operation, id string, patch Patc
 			if patch.Deleted != nil {
 				m.Deleted = *patch.Deleted
 			}
+			typeValue, validType := NormalizeMemoType(m.Type, patch.Type != nil, m.AttachmentIDs)
+			if !validType {
+				return nil, ErrInvalidMemo
+			}
+			m.Type = typeValue
 			if strings.TrimSpace(m.Content) == "" && len(m.AttachmentIDs) == 0 {
 				return nil, ErrInvalidMemo
 			}

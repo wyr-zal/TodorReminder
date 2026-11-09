@@ -63,34 +63,11 @@ func TestMemoHTTP(t *testing.T) {
 	if receipt.ID != testID || repo.operation != testOp || repo.input.Priority != "unimportant" || repo.input.Status != "not_started" || len(repo.input.Tags) != 1 || repo.input.Tags[0] != "TODO" {
 		t.Fatalf("bad create normalization: %+v", repo.input)
 	}
-	for _, test := range []struct {
-		name string
-		body string
-		want []string
-	}{
-		{name: "empty tags", body: `{"content":"hello","tags":[]}`, want: []string{"TODO"}},
-		{name: "custom tags", body: `{"content":"hello","tags":["BUG"]}`, want: []string{"BUG"}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			w := request(s, "POST", "/api/v1/memos", test.body, testOp)
-			if w.Code != 201 {
-				t.Fatalf("create: %d %s", w.Code, w.Body.String())
-			}
-			if len(repo.input.Tags) != len(test.want) {
-				t.Fatalf("tags = %#v, want %#v", repo.input.Tags, test.want)
-			}
-			for i, tag := range test.want {
-				if repo.input.Tags[i] != tag {
-					t.Fatalf("tags = %#v, want %#v", repo.input.Tags, test.want)
-				}
-			}
-		})
-	}
 	w = request(s, "GET", "/api/v1/memos/"+testID, "", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "hello") {
 		t.Fatalf("get: %d %s", w.Code, w.Body.String())
 	}
-	for _, body := range []string{`{"content":"hello","unknown":1}`, `{"content":"hello","status":"pending"}`, `{"content":"hello"} {}`, `{"content":""}`, `{"content":"hello","attachmentIds":["../../etc/passwd"]}`} {
+	for _, body := range []string{`{"content":"hello","unknown":1}`, `{"content":"hello","status":"pending"}`, `{"content":"hello"} {}`, `{"content":""}`, `{"content":"hello","type":"image"}`, `{"content":"hello","attachmentIds":["../../etc/passwd"]}`} {
 		w = request(s, "POST", "/api/v1/memos", body, testOp)
 		if w.Code != 422 {
 			t.Fatalf("bad input accepted: %d %s", w.Code, body)
@@ -108,5 +85,48 @@ func TestMemoHTTP(t *testing.T) {
 	w = request(s, "POST", "/api/v1/memos", `{"content":"hello"}`, testOp)
 	if w.Code != 409 {
 		t.Fatalf("mismatch: %d", w.Code)
+	}
+}
+
+func TestCreateMemoNormalizesTags(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+		want []string
+	}{
+		{name: "empty tags", body: `{"content":"hello","tags":[]}`, want: []string{"TODO"}},
+		{name: "custom tags", body: `{"content":"hello","tags":["BUG"]}`, want: []string{"BUG"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s, repo := harness(t)
+			w := request(s, "POST", "/api/v1/memos", test.body, testOp)
+			if w.Code != 201 {
+				t.Fatalf("create: %d %s", w.Code, w.Body.String())
+			}
+			if len(repo.input.Tags) != len(test.want) {
+				t.Fatalf("tags = %#v, want %#v", repo.input.Tags, test.want)
+			}
+			for i, tag := range test.want {
+				if repo.input.Tags[i] != tag {
+					t.Fatalf("tags = %#v, want %#v", repo.input.Tags, test.want)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateMemoRejectsTextTypeWithAttachments(t *testing.T) {
+	s, _ := harness(t)
+	w := request(s, "POST", "/api/v1/memos", `{"content":"hello","type":"text","attachmentIds":["33333333-3333-4333-8333-333333333333"]}`, testOp)
+	if w.Code != 422 {
+		t.Fatalf("inconsistent memo type accepted: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateMemoInfersImageTypeFromAttachments(t *testing.T) {
+	s, repo := harness(t)
+	w := request(s, "POST", "/api/v1/memos", `{"content":"hello","attachmentIds":["33333333-3333-4333-8333-333333333333"]}`, testOp)
+	if w.Code != 201 || repo.input.Type != "image" {
+		t.Fatalf("attachment type was not inferred: code=%d type=%q body=%s", w.Code, repo.input.Type, w.Body.String())
 	}
 }

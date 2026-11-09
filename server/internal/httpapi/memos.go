@@ -64,15 +64,11 @@ func normalize(input *store.CreateMemoRequest) bool {
 			return false
 		}
 	}
-	if input.Type == "" {
-		input.Type = "text"
-		if len(input.AttachmentIDs) > 0 {
-			input.Type = "image"
-		}
-	}
-	if input.Type != "text" && input.Type != "image" {
+	typeValue, validType := store.NormalizeMemoType(input.Type, input.Type != "", input.AttachmentIDs)
+	if !validType {
 		return false
 	}
+	input.Type = typeValue
 	return strings.TrimSpace(input.Content) != "" || len(input.AttachmentIDs) > 0
 }
 func (s *Server) createMemo(w http.ResponseWriter, r *http.Request) {

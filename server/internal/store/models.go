@@ -2,6 +2,20 @@ package store
 
 import "errors"
 
+// NormalizeMemoType keeps the memo type consistent with its attachment list.
+func NormalizeMemoType(value string, specified bool, attachmentIDs []string) (string, bool) {
+	if !specified {
+		if len(attachmentIDs) > 0 {
+			return "image", true
+		}
+		return "text", true
+	}
+	if (value != "text" && value != "image") || (value == "image") != (len(attachmentIDs) > 0) {
+		return "", false
+	}
+	return value, true
+}
+
 var (
 	ErrNotFound            = errors.New("not found")
 	ErrIdempotencyMismatch = errors.New("idempotency key was reused for another request")
