@@ -10,6 +10,7 @@ import {
   saveClipboardImagesStrict
 } from '../utils/memoPaste'
 import { thumbImageUrl } from '../utils/imageUrl'
+import { extractTrailingTags } from '../utils/memoTags'
 import {
   IDLE_IMAGE_COPY,
   ImageCopyFeedback,
@@ -450,7 +451,8 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
       setEditError('图片清理正在处理中，请稍后保存。')
       return
     }
-    if (!editContent.trim() && editAttachments.length === 0) {
+    const { content: contentToSave, tags: contentTags } = extractTrailingTags(editContent)
+    if (!contentToSave.trim() && editAttachments.length === 0) {
       setEditError('待办内容和图片不能同时为空。')
       return
     }
@@ -469,7 +471,6 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
         }
         tagsToSave = [...editTags, nextTag]
       } else if (renamingTag) {
-        if (renamingTag === DEFAULT_TAG) return
         if (nextTag !== renamingTag && editTags.includes(nextTag)) {
           setTagError('该标签已存在。')
           return
@@ -478,13 +479,14 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
       }
     }
 
+    tagsToSave = [...new Set([...tagsToSave, ...contentTags])]
     editSavingRef.current = true
     setEditSaving(true)
     try {
       let saved = false
       try {
         saved = await updateMemo(memo.id, {
-          content: editContent,
+          content: contentToSave,
           tags: tagsToSave,
           attachments: editAttachments,
           type: editAttachments.length > 0 ? 'image' : 'text'
@@ -601,7 +603,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
   }
 
   const beginRenameTag = (tag: string) => {
-    if (tag === DEFAULT_TAG || editSavingRef.current || pendingAttachmentOpsRef.current > 0) return
+    if (editSavingRef.current || pendingAttachmentOpsRef.current > 0) return
     captureCardAnchor()
     setTagDraft(tag)
     setTagError('')
@@ -632,7 +634,6 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
       captureCardAnchor()
       setEditTags(previous => [...previous, nextTag])
     } else if (renamingTag) {
-      if (renamingTag === DEFAULT_TAG) return
       if (nextTag !== renamingTag && editTags.includes(nextTag)) {
         setTagError('该标签已存在。')
         return
@@ -645,7 +646,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
   }
 
   const removeEditTag = (tag: string) => {
-    if (tag === DEFAULT_TAG || editSavingRef.current || pendingAttachmentOpsRef.current > 0) return
+    if (editSavingRef.current || pendingAttachmentOpsRef.current > 0) return
     captureCardAnchor()
     setEditTags(previous => previous.filter(item => item !== tag))
   }
@@ -1084,9 +1085,13 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
                       className="w-20 min-w-0 bg-transparent outline-none"
                     />
                   ) : (
-                    <span>#{tag}</span>
+                    <span
+                      onDoubleClick={isEditing ? () => beginRenameTag(tag) : undefined}
+                      title={isEditing ? '双击修改标签' : undefined}
+                      className={isEditing ? 'cursor-text' : undefined}
+                    >#{tag}</span>
                   )}
-                  {isEditing && renamingTag !== tag && tag !== DEFAULT_TAG && (
+                  {isEditing && renamingTag !== tag && (
                     <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/tag:opacity-100 focus-within:opacity-100 transition-opacity">
                       <button
                         type="button"
