@@ -11,6 +11,7 @@ import {
 } from '../utils/memoPaste'
 import { thumbImageUrl } from '../utils/imageUrl'
 import { extractTrailingTags } from '../utils/memoTags'
+import { removeBlankLines } from '../utils/memoContent'
 import {
   IDLE_IMAGE_COPY,
   ImageCopyFeedback,
@@ -486,7 +487,7 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
       let saved = false
       try {
         saved = await updateMemo(memo.id, {
-          content: contentToSave,
+          content: removeBlankLines(contentToSave),
           tags: tagsToSave,
           attachments: editAttachments,
           type: editAttachments.length > 0 ? 'image' : 'text'

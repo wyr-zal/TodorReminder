@@ -10,6 +10,7 @@ import {
 } from '../utils/memoPaste'
 import { thumbImageUrl } from '../utils/imageUrl'
 import { breakInlineTags } from '../utils/tagLineBreak'
+import { removeBlankLines } from '../utils/memoContent'
 import {
   IDLE_IMAGE_COPY,
   ImageCopyFeedback,
@@ -36,7 +37,7 @@ function parseTagsFromContent(text: string): { content: string; tags: string[] }
   while ((match = tagRegex.exec(text)) !== null) {
     tags.push(match[1])
   }
-  const content = text.replace(tagRegex, '').trim()
+  const content = removeBlankLines(text.replace(tagRegex, ''))
   return { content, tags: [...new Set(tags)] }
 }
 
