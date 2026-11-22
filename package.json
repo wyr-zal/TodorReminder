@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "memo:agent": "node scripts/focus-memo-agent.mjs",
+    "test:agent-cli": "node --test tests/focus-memo-agent-cli.test.mjs",
     "preview": "electron-vite preview",
     "package": "npm run build && electron-builder --win --dir",
     "dist": "npm run build && electron-builder --win"
