@@ -25,7 +25,7 @@ function getSavedInputPanelHeight(): number {
 
 function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const { loadMemos, memos } = useMemoStore()
+  const { loadMemos, memos, isSearchOpen, openSearch, closeSearch } = useMemoStore()
   const [focusedMemoId, setFocusedMemoId] = useState<string | null>(null)
   const [inputPanelHeight, setInputPanelHeight] = useState(getSavedInputPanelHeight)
   const [hasPendingImages, setHasPendingImages] = useState(false)
@@ -58,9 +58,27 @@ function App() {
     }
   }, [focusedMemoId, memos])
 
+  const prevSearchOpenRef = useRef(isSearchOpen)
+  useEffect(() => {
+    // 关闭搜索后把焦点交回新建待办输入框，避免焦点丢失
+    if (prevSearchOpenRef.current && !isSearchOpen) inputRef.current?.focus()
+    prevSearchOpenRef.current = isSearchOpen
+  }, [isSearchOpen])
+
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
-      const isCtrlW = event.ctrlKey && event.key.toLowerCase() === 'w'
+      const key = event.key.toLowerCase()
+      const isCtrlW = event.ctrlKey && !event.altKey && !event.metaKey && key === 'w'
+      const isCtrlF = event.ctrlKey && !event.altKey && !event.metaKey && key === 'f'
+
+      if (isCtrlF) {
+        if (document.querySelector('[data-modal]') || event.defaultPrevented || event.isComposing) return
+        event.preventDefault()
+        if (focusedMemoId) setFocusedMemoId(null)
+        openSearch()
+        return
+      }
+
       const target = event.target instanceof HTMLElement ? event.target : null
       const isEditing = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'))
 
@@ -73,16 +91,22 @@ function App() {
       if (event.defaultPrevented || event.isComposing || (event.key !== 'Escape' && !isCtrlW)) return
 
       event.preventDefault()
-      if (event.key === 'Escape' && focusedMemoId) {
-        setFocusedMemoId(null)
-        return
+      if (event.key === 'Escape') {
+        if (focusedMemoId) {
+          setFocusedMemoId(null)
+          return
+        }
+        if (isSearchOpen) {
+          closeSearch()
+          return
+        }
       }
       void window.electronAPI.window.hide()
     }
 
     window.addEventListener('keydown', handleWindowKeyDown)
     return () => window.removeEventListener('keydown', handleWindowKeyDown)
-  }, [focusedMemoId])
+  }, [focusedMemoId, isSearchOpen, openSearch, closeSearch])
 
   const handleSnapToEdge = () => {
     window.electronAPI.window.snapToEdge()

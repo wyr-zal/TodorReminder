@@ -35,6 +35,11 @@ app.whenReady().then(async () => {
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'ESC' })
     await new Promise(resolve => setTimeout(resolve, 80))
   }
+  const ctrlF = async () => {
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: ['control'] })
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers: ['control'] })
+    await new Promise(resolve => setTimeout(resolve, 80))
+  }
   await win.loadFile(resolve(__dirname, '../../dist/renderer/index.html'))
   win.showInactive()
   await wait(`document.querySelectorAll('[aria-label="全屏展开"]').length > 0`)
@@ -193,6 +198,64 @@ app.whenReady().then(async () => {
   await escape()
   assert.equal(await js('!!document.querySelector(".memo-focus-card")'), false)
   assert.equal(await js('window.memoTest.calls().filter(call => call.kind === "hide").length'), 0)
+
+  // 验证 Ctrl+F 在输入态呼出、方式 1 全库搜索（忽略进行中状态筛选与标签）、高亮与 Esc 恢复原筛选
+  await click('button[title="同步设置"]')
+  await js(`Array.from(document.querySelectorAll('[data-modal] button')).find(button => button.textContent.trim() === '显示')?.click()`)
+  await click('[aria-label="状态筛选：进行中"]')
+  await wait(`document.querySelector('[aria-label="状态筛选：进行中"]')?.getAttribute('aria-pressed') === 'true'`)
+  // 弹窗打开时不抢占 Ctrl+F
+  await ctrlF()
+  assert.equal(await js('!!document.querySelector(".memo-search-bar")'), false)
+  await click('[data-modal] button')
+  await wait('!document.querySelector("[data-modal]")')
+  await js('document.querySelector(".memo-input-panel textarea").focus()')
+  await ctrlF()
+  await wait('!!document.querySelector(\'[aria-label="搜索待办内容或标签"]\')')
+  assert.equal(await js('document.activeElement === document.querySelector(\'[aria-label="搜索待办内容或标签"]\')'), true)
+  const setSearchValue = async value => js(`{
+    const input = document.querySelector('[aria-label="搜索待办内容或标签"]')
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)})
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }`)
+  await setSearchValue('键盘')
+  await wait(`document.querySelectorAll('[data-memo-id]').length === 2`)
+  const searchResult = await js(`({
+    ids: Array.from(document.querySelectorAll('[data-memo-id]')).map(el => el.getAttribute('data-memo-id')),
+    countBadge: document.querySelector('.memo-search-bar')?.textContent || '',
+    contentMark: document.querySelector('[data-memo-id="memo-2"] p mark.memo-search-highlight')?.textContent || '',
+    tagMark: document.querySelector('[data-memo-id="memo-3"] [data-tag-chip="机械键盘"] mark.memo-search-highlight')?.textContent || ''
+  })`)
+  assert.deepEqual(searchResult.ids, ['memo-2', 'memo-3'])
+  assert.ok(searchResult.countBadge.includes('2 条'), JSON.stringify(searchResult))
+  assert.equal(searchResult.contentMark, '键盘')
+  assert.equal(searchResult.tagMark, '键盘')
+  await new Promise(resolve => setTimeout(resolve, 120))
+  writeFileSync(join(output, 'search-light.png'), (await win.webContents.capturePage()).toPNG())
+  await js('document.documentElement.classList.add("dark")')
+  await new Promise(resolve => setTimeout(resolve, 120))
+  writeFileSync(join(output, 'search-dark.png'), (await win.webContents.capturePage()).toPNG())
+  await js('document.documentElement.classList.remove("dark")')
+  await setSearchValue('图片备忘')
+  await wait(`document.querySelectorAll('[data-memo-id]').length === 0`)
+  await ctrlF()
+  assert.equal(await js(`(() => {
+    const input = document.querySelector('[aria-label="搜索待办内容或标签"]')
+    return document.activeElement === input && input.selectionStart === 0 && input.selectionEnd === input.value.length
+  })()`), true)
+  await escape()
+  await wait('!document.querySelector(".memo-search-bar")')
+  await wait('document.activeElement === document.querySelector(".memo-input-panel textarea")')
+  assert.equal(await js('document.querySelector(".memo-input-panel textarea").value'), 'TOP_DRAFT')
+  assert.equal(await js('window.memoTest.calls().filter(call => call.kind === "hide").length'), 0)
+  await click('button[title="同步设置"]')
+  await js(`Array.from(document.querySelectorAll('[data-modal] button')).find(button => button.textContent.trim() === '显示')?.click()`)
+  await wait(`document.querySelector('[aria-label="状态筛选：进行中"]')?.getAttribute('aria-pressed') === 'true'`)
+  await click('[aria-label="状态筛选：全部"]')
+  await wait(`document.querySelector('[aria-label="状态筛选：全部"]')?.getAttribute('aria-pressed') === 'true'`)
+  await click('[data-modal] button')
+  await wait('!document.querySelector("[data-modal]")')
+  await wait('!!document.querySelector(\'[data-memo-id="memo-0"]\')')
   await click('[data-memo-id="memo-0"] [aria-label="全屏展开"]')
   await js('document.documentElement.classList.add("dark")')
   await new Promise(resolve => setTimeout(resolve, 150))

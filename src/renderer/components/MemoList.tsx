@@ -3,6 +3,7 @@ import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
 import { useMemoStore } from '../store/memoStore'
 import type { Memo } from '../../shared/types'
 import { sortMemos } from '../utils/memoSort'
+import { matchesMemoSearch } from '../utils/memoSearch'
 import MemoItem from './MemoItem'
 import FilterBar from './FilterBar'
 
@@ -14,13 +15,27 @@ interface MemoListProps {
 }
 
 function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
-  const { memos, filter, priorityFilter, tagFilter, sortOrder } = useMemoStore()
+  const {
+    memos,
+    filter,
+    priorityFilter,
+    tagFilter,
+    sortOrder,
+    isSearchOpen,
+    searchQuery,
+    searchFocusTick,
+    setSearchQuery,
+    closeSearch
+  } = useMemoStore()
   const listRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [focusSnapshot, setFocusSnapshot] = useState<{ ids: string[]; scrollTop: number } | null>(null)
   const [editingMemos, setEditingMemos] = useState<Record<string, Memo>>({})
   const scrollAnimRef = useRef<number | null>(null)
   const prevSortOrderRef = useRef(sortOrder)
+  const preSearchScrollTopRef = useRef<number | null>(null)
+  const prevSearchStateRef = useRef({ active: false, query: '' })
   // 记录上一帧各行几何，行消失（删除/远端同步）时补偿 scrollTop 保持视口连续
   const prevRowsRef = useRef<{ ids: string[]; rects: Map<string, { top: number; height: number }>; scrollTop: number } | null>(null)
 
@@ -39,15 +54,18 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     })
   }, [])
 
+  const hasActiveSearch = isSearchOpen && searchQuery.trim().length > 0
+
   const filteredMemos = useMemo(() => {
     return memos.filter((memo) => {
       if (memo.deleted) return false
+      if (hasActiveSearch) return matchesMemoSearch(memo, searchQuery)
       if (filter !== 'all' && memo.status !== filter) return false
       if (priorityFilter !== 'all' && memo.priority !== priorityFilter) return false
       if (tagFilter && !(memo.tags || []).includes(tagFilter)) return false
       return true
     })
-  }, [filter, memos, priorityFilter, tagFilter])
+  }, [filter, hasActiveSearch, memos, priorityFilter, searchQuery, tagFilter])
 
   const sortedMemos = useMemo(() => {
     return sortMemos(filteredMemos, sortOrder)
@@ -129,6 +147,40 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     if (editingOutsideIndex >= 0) rowVirtualizer.scrollToIndex(editingOutsideIndex, { align: 'auto' })
   }, [editingOutsideIndex])
 
+  useEffect(() => {
+    if (!isSearchOpen || focusedMemoId) return
+    const input = searchInputRef.current
+    if (!input) return
+    input.focus()
+    input.select()
+  }, [isSearchOpen, searchFocusTick, focusedMemoId])
+
+  useLayoutEffect(() => {
+    const prev = prevSearchStateRef.current
+    const normalized = hasActiveSearch ? searchQuery.trim() : ''
+    if (prev.active === hasActiveSearch && prev.query === normalized) return
+    prevSearchStateRef.current = { active: hasActiveSearch, query: normalized }
+
+    const el = listRef.current
+    // 搜索结果切换会导致大量行增删，重置行快照以免触发删除行补偿逻辑
+    prevRowsRef.current = null
+    cancelScrollAnim()
+
+    if (!el || focusedMemoId) return
+    if (!prev.active && hasActiveSearch) {
+      preSearchScrollTopRef.current = el.scrollTop
+      el.scrollTop = 0
+      setShowScrollTop(false)
+    } else if (hasActiveSearch) {
+      el.scrollTop = 0
+      setShowScrollTop(false)
+    } else if (prev.active && !hasActiveSearch) {
+      el.scrollTop = preSearchScrollTopRef.current ?? 0
+      preSearchScrollTopRef.current = null
+      setShowScrollTop(false)
+    }
+  }, [focusedMemoId, hasActiveSearch, searchQuery])
+
   // 删除/远端同步移除行后保持视口连续：被移除行原位于视口内或其上方时，
   // 把 scrollTop 收缩对应高度，防止下方内容突然上跳（absolute 布局浏览器无法自动锚定）
   useLayoutEffect(() => {
@@ -192,6 +244,70 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
     <div className="memo-list-shell flex-1 flex flex-col overflow-hidden">
       <FilterBar />
 
+      {isSearchOpen && (
+        <div className="memo-search-bar flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50">
+          <svg
+            className="w-3.5 h-3.5 shrink-0 text-slate-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                e.stopPropagation()
+                closeSearch()
+              }
+            }}
+            aria-label="搜索待办内容或标签"
+            placeholder="搜索全部正文或标签… (Esc 关闭)"
+            className="flex-1 min-w-0 bg-transparent text-xs text-slate-700 placeholder-slate-400 focus:outline-none"
+          />
+          {hasActiveSearch && (
+            <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">
+              {filteredMemos.length} 条
+            </span>
+          )}
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                searchInputRef.current?.focus()
+              }}
+              aria-label="清空搜索词"
+              title="清空搜索词"
+              className="px-1 py-0.5 text-[11px] text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              清空
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={closeSearch}
+            aria-label="关闭搜索"
+            title="关闭搜索 (Esc)"
+            className="p-0.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       <div className="relative flex-1 min-h-0">
         <div ref={listRef} onScroll={handleListScroll} className="h-full overflow-y-auto px-3 py-2.5">
           {displayedMemos.length === 0 ? (
@@ -200,7 +316,9 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
                 <rect x="8" y="4" width="24" height="32" rx="3" />
                 <path d="M14 12h12M14 18h12M14 24h8" />
               </svg>
-              <p className="text-xs text-slate-400 tracking-wide">暂无记录</p>
+              <p className="text-xs text-slate-400 tracking-wide">
+                {hasActiveSearch ? '未找到匹配的待办' : '暂无记录'}
+              </p>
             </div>
           ) : (
             <div
@@ -222,6 +340,7 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
                   <MemoItem
                     memo={displayedMemos[virtualRow.index]}
                     isFocused={virtualRow.index === focusedIndex}
+                    searchQuery={hasActiveSearch ? searchQuery : undefined}
                     onToggleFocus={() => focusedMemoId
                       ? onFocusMemoChange(null)
                       : openFocus(displayedMemos[virtualRow.index].id)}

@@ -2,12 +2,25 @@ const { contextBridge } = require('electron')
 
 let memos = Array.from({ length: 120 }, (_, index) => ({
   id: `memo-${index}`,
-  content: index === 0 ? 'FOCUS_TARGET\n' + Array.from({ length: 36 }, (_, line) => `长内容第 ${line + 1} 行，验证完整阅读和滚动。`).join('\n') : index === 1 ? '图片备忘' : `普通待办 ${index}`,
+  content: index === 0
+    ? 'FOCUS_TARGET\n' + Array.from({ length: 36 }, (_, line) => `长内容第 ${line + 1} 行，验证完整阅读和滚动。`).join('\n')
+    : index === 1
+      ? '图片备忘'
+      : index === 2
+        ? '购买无线键盘'
+        : index === 3
+          ? '桌面外设清单'
+          : `普通待办 ${index}`,
   type: index === 1 ? 'image' : 'text',
   attachments: index === 0 ? ['first.png', 'second.png'] : index === 1 ? ['only.png'] : [],
-  priority: 'unimportant', status: 'not_started', tags: index === 0 ? ['work', 'TODO'] : ['work'],
+  priority: 'unimportant',
+  status: index === 3 ? 'completed' : 'not_started',
+  tags: index === 0 ? ['work', 'TODO'] : index === 3 ? ['机械键盘'] : ['work'],
   createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 120 - index)).toISOString(),
-  updatedAt: '2026-01-01T00:00:00.000Z', completedAt: null, deviceId: 'test', deleted: false
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  completedAt: index === 3 ? '2026-01-01T00:00:00.000Z' : null,
+  deviceId: 'test',
+  deleted: false
 }))
 let appSettings = { imageCompression: true, imageMaxSize: 500, imageMaxWidth: 1200, fixedPosition: 'right-center' }
 const calls = []

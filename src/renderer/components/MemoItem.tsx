@@ -13,6 +13,11 @@ import { thumbImageUrl } from '../utils/imageUrl'
 import { extractTrailingTags } from '../utils/memoTags'
 import { removeBlankLines } from '../utils/memoContent'
 import {
+  HighlightSegment,
+  splitHighlightSegments,
+  splitTagHighlightSegments
+} from '../utils/memoSearch'
+import {
   IDLE_IMAGE_COPY,
   ImageCopyFeedback,
   ImageCopyIcon,
@@ -23,8 +28,25 @@ import {
 interface MemoItemProps {
   memo: Memo
   isFocused: boolean
+  searchQuery?: string
   onToggleFocus: () => void
   onEditingChange: (memo: Memo | null, id: string) => void
+}
+
+function HighlightedSegments({ segments }: { segments: HighlightSegment[] }) {
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.matched ? (
+          <mark key={index} className="memo-search-highlight">
+            {segment.text}
+          </mark>
+        ) : (
+          segment.text
+        )
+      )}
+    </>
+  )
 }
 
 const DEFAULT_TAG = 'TODO'
@@ -110,7 +132,7 @@ function StatusIcon({ status }: { status: MemoStatus }) {
   )
 }
 
-function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemProps) {
+function MemoItem({ memo, isFocused, searchQuery, onToggleFocus, onEditingChange }: MemoItemProps) {
   const memoContent = memo.type === 'image' && memo.content === '图片备忘' ? '' : memo.content
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(memoContent)
@@ -1012,7 +1034,9 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
                 } ${needsClamp && !isExpanded && !isFocused ? 'line-clamp-3' : ''}`}
                 onDoubleClick={startEditing}
               >
-                {memoContent}
+                {searchQuery
+                  ? <HighlightedSegments segments={splitHighlightSegments(memoContent, searchQuery)} />
+                  : memoContent}
               </p>
               {needsClamp && !isExpanded && !isFocused && (
                 <div
@@ -1090,7 +1114,11 @@ function MemoItem({ memo, isFocused, onToggleFocus, onEditingChange }: MemoItemP
                       onDoubleClick={isEditing ? () => beginRenameTag(tag) : undefined}
                       title={isEditing ? '双击修改标签' : undefined}
                       className={isEditing ? 'cursor-text' : undefined}
-                    >#{tag}</span>
+                    >
+                      {!isEditing && searchQuery
+                        ? <HighlightedSegments segments={splitTagHighlightSegments(tag, searchQuery)} />
+                        : `#${tag}`}
+                    </span>
                   )}
                   {isEditing && renamingTag !== tag && (
                     <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/tag:opacity-100 focus-within:opacity-100 transition-opacity">

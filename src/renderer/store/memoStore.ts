@@ -37,6 +37,9 @@ interface MemoState {
   tagFilter: string | null
   tagSort: TagSortMode
   sortOrder: MemoSortOrder
+  isSearchOpen: boolean
+  searchQuery: string
+  searchFocusTick: number
   isLoading: boolean
 
   loadMemos: () => Promise<void>
@@ -50,6 +53,9 @@ interface MemoState {
   setTagFilter: (tag: string | null) => void
   setTagSort: (mode: TagSortMode) => void
   setSortOrder: (order: MemoSortOrder) => void
+  openSearch: () => void
+  closeSearch: () => void
+  setSearchQuery: (query: string) => void
   getAllTags: () => string[]
 }
 
@@ -60,6 +66,9 @@ export const useMemoStore = create<MemoState>((set, get) => ({
   tagFilter: null,
   tagSort: getSavedTagSort(),
   sortOrder: getSavedSortOrder(),
+  isSearchOpen: false,
+  searchQuery: '',
+  searchFocusTick: 0,
   isLoading: false,
 
   loadMemos: async () => {
@@ -196,6 +205,18 @@ export const useMemoStore = create<MemoState>((set, get) => ({
   setSortOrder: (sortOrder: MemoSortOrder) => {
     localStorage.setItem(MEMO_SORT_ORDER_KEY, sortOrder)
     set({ sortOrder })
+  },
+
+  openSearch: () => {
+    set((state) => ({ isSearchOpen: true, searchFocusTick: state.searchFocusTick + 1 }))
+  },
+
+  closeSearch: () => {
+    set({ isSearchOpen: false, searchQuery: '' })
+  },
+
+  setSearchQuery: (searchQuery: string) => {
+    set({ searchQuery })
   },
 
   getAllTags: () => {
