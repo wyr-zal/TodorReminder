@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useLayoutEffect } from 'react'
-import { useMemoStore, type StatusFilter } from '../store/memoStore'
-import { Priority } from '../../shared/types'
+import { useMemoStore } from '../store/memoStore'
+import { MemoSortOrder, Priority } from '../../shared/types'
 
 type TagExpandLevel = 'collapsed' | 'preview' | 'full'
 
@@ -14,14 +14,6 @@ const priorityCycle: { value: Priority | 'all'; label: string }[] = [
   { value: 'important', label: '重要' },
   { value: 'unimportant', label: '不重要' }
 ]
-
-// 状态循环切换：全部 → 未开始 → 进行中 → 已完成
-const statusCycle = [
-  { value: 'all', label: '全部' },
-  { value: 'not_started', label: '未开始' },
-  { value: 'in_progress', label: '进行中' },
-  { value: 'completed', label: '已完成' }
-] as const
 
 // 单个方格用颜色表示重要等级筛选状态
 function PriorityBarsIcon({ filter }: { filter: Priority | 'all' }) {
@@ -37,42 +29,26 @@ function PriorityBarsIcon({ filter }: { filter: Priority | 'all' }) {
   )
 }
 
-// 状态图标：空心（全部/未开始）/ 播放（进行中）/ 勾选（已完成）
-function StatusIcon({ filter }: { filter: StatusFilter }) {
-  if (filter === 'completed') {
+// 排序图标：倒序（向下箭头 + 上宽下窄） / 顺序（向上箭头 + 上窄下宽）
+function SortOrderIcon({ order }: { order: MemoSortOrder }) {
+  if (order === 'asc') {
     return (
-      <svg className="h-4 w-4" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" className="fill-emerald-500" />
-        <path
-          d="M4.6 8.3l2.3 2.3 4.5-5"
-          fill="none"
-          stroke="#fff"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    )
-  }
-  if (filter === 'in_progress') {
-    return (
-      <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" className="fill-current" />
-        <path d="M6.5 4.8 11 8l-4.5 3.2z" className="fill-white" />
-      </svg>
-    )
-  }
-  if (filter === 'not_started') {
-    return (
-      <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" />
+      <svg className="h-4 w-4 text-indigo-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4.5 13V3" />
+        <path d="M2.3 5.5 4.5 3l2.2 2.5" />
+        <path d="M8.5 4h2" />
+        <path d="M8.5 8h3.5" />
+        <path d="M8.5 12h5" />
       </svg>
     )
   }
   return (
-    <svg className="h-4 w-4 text-slate-400" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" />
-      <path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor" />
+    <svg className="h-4 w-4 text-slate-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4.5 3v10" />
+      <path d="M2.3 10.5 4.5 13l2.2-2.5" />
+      <path d="M8.5 4h5" />
+      <path d="M8.5 8h3.5" />
+      <path d="M8.5 12h2" />
     </svg>
   )
 }
@@ -82,12 +58,12 @@ const tagButtonBase =
 
 function FilterBar() {
   const {
-    filter,
-    setFilter,
     priorityFilter,
     setPriorityFilter,
     tagFilter,
     setTagFilter,
+    sortOrder,
+    setSortOrder,
     getAllTags
   } = useMemoStore()
   const allTags = getAllTags()
@@ -139,14 +115,13 @@ function FilterBar() {
     setPriorityFilter(priorityCycle[(idx + 1) % priorityCycle.length].value)
   }
 
-  // 循环切换状态：全部 → 未开始 → 进行中 → 已完成
-  const handleStatusCycle = () => {
-    const idx = statusCycle.findIndex((s) => s.value === filter)
-    setFilter(statusCycle[(idx + 1) % statusCycle.length].value)
+  // 切换组内时间顺序：倒序（最新在前） ↔ 顺序（最早在前）
+  const handleSortOrderToggle = () => {
+    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')
   }
 
   const priorityCurrent = priorityCycle.find((p) => p.value === priorityFilter) ?? priorityCycle[0]
-  const statusCurrent = statusCycle.find((s) => s.value === filter) ?? statusCycle[0]
+  const sortLabel = sortOrder === 'desc' ? '倒序（最新在前）' : '顺序（最早在前）'
 
   const tagContainerMaxHeight =
     tagExpandLevel === 'full'
@@ -225,16 +200,16 @@ function FilterBar() {
           <PriorityBarsIcon filter={priorityFilter} />
         </button>
 
-        {/* 状态循环切换：全部 → 未开始 → 进行中 → 已完成 */}
+        {/* 组内时间排序切换：倒序（最新在前） ↔ 顺序（最早在前） */}
         <button
           type="button"
-          onClick={handleStatusCycle}
-          title={`状态：${statusCurrent.label}`}
-          aria-label={`状态筛选：${statusCurrent.label}`}
-          aria-haspopup="true"
+          onClick={handleSortOrderToggle}
+          title={`排序：${sortLabel}`}
+          aria-label={`列表排序：${sortLabel}`}
+          aria-pressed={sortOrder === 'asc'}
           className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded transition-colors cursor-pointer hover:bg-slate-100"
         >
-          <StatusIcon filter={filter} />
+          <SortOrderIcon order={sortOrder} />
         </button>
 
         {showExpandControls && (

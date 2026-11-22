@@ -92,6 +92,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 export type TagSortMode = 'latest' | 'count' | 'alpha'
+export type MemoSortOrder = 'desc' | 'asc'
 
 // IPC 通道名称
 export const IPC_CHANNELS = {

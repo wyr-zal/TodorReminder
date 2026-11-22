@@ -1,8 +1,10 @@
 import { create } from 'zustand'
-import type { Memo, Priority, MemoStatus, TagSortMode } from '../../shared/types'
+import type { Memo, Priority, MemoStatus, TagSortMode, MemoSortOrder } from '../../shared/types'
 import { v4 as uuidv4 } from 'uuid'
 
 const TAG_SORT_KEY = 'memo-tag-sort'
+const MEMO_SORT_ORDER_KEY = 'memo-sort-order'
+const STATUS_FILTER_KEY = 'memo-status-filter'
 const DEFAULT_TAG = 'TODO'
 
 function normalizeTags(tags?: string[]): string[] {
@@ -15,6 +17,17 @@ function getSavedTagSort(): TagSortMode {
   return 'latest'
 }
 
+function getSavedSortOrder(): MemoSortOrder {
+  const v = localStorage.getItem(MEMO_SORT_ORDER_KEY)
+  return v === 'asc' || v === 'desc' ? v : 'desc'
+}
+
+function getSavedStatusFilter(): StatusFilter {
+  const v = localStorage.getItem(STATUS_FILTER_KEY)
+  if (v === 'all' || v === 'not_started' || v === 'in_progress' || v === 'completed') return v
+  return 'all'
+}
+
 export type StatusFilter = MemoStatus | 'all'
 
 interface MemoState {
@@ -23,6 +36,7 @@ interface MemoState {
   priorityFilter: Priority | 'all'
   tagFilter: string | null
   tagSort: TagSortMode
+  sortOrder: MemoSortOrder
   isLoading: boolean
 
   loadMemos: () => Promise<void>
@@ -35,15 +49,17 @@ interface MemoState {
   setPriorityFilter: (priority: Priority | 'all') => void
   setTagFilter: (tag: string | null) => void
   setTagSort: (mode: TagSortMode) => void
+  setSortOrder: (order: MemoSortOrder) => void
   getAllTags: () => string[]
 }
 
 export const useMemoStore = create<MemoState>((set, get) => ({
   memos: [],
-  filter: 'all',
+  filter: getSavedStatusFilter(),
   priorityFilter: 'all',
   tagFilter: null,
   tagSort: getSavedTagSort(),
+  sortOrder: getSavedSortOrder(),
   isLoading: false,
 
   loadMemos: async () => {
@@ -163,7 +179,10 @@ export const useMemoStore = create<MemoState>((set, get) => ({
     })
   },
 
-  setFilter: (filter: StatusFilter) => set({ filter }),
+  setFilter: (filter: StatusFilter) => {
+    localStorage.setItem(STATUS_FILTER_KEY, filter)
+    set({ filter })
+  },
 
   setPriorityFilter: (priority: Priority | 'all') => set({ priorityFilter: priority }),
 
@@ -172,6 +191,11 @@ export const useMemoStore = create<MemoState>((set, get) => ({
   setTagSort: (mode: TagSortMode) => {
     localStorage.setItem(TAG_SORT_KEY, mode)
     set({ tagSort: mode })
+  },
+
+  setSortOrder: (sortOrder: MemoSortOrder) => {
+    localStorage.setItem(MEMO_SORT_ORDER_KEY, sortOrder)
+    set({ sortOrder })
   },
 
   getAllTags: () => {

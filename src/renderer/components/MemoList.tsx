@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
 import { useMemoStore } from '../store/memoStore'
-import type { Memo, MemoStatus } from '../../shared/types'
+import type { Memo } from '../../shared/types'
+import { sortMemos } from '../utils/memoSort'
 import MemoItem from './MemoItem'
 import FilterBar from './FilterBar'
 
-// 列表状态分档：进行中置顶，未开始次之，已完成沉底
-const STATUS_RANK: Record<MemoStatus, number> = { in_progress: 0, not_started: 1, completed: 2 }
 const SCROLL_TOP_REVEAL_INDEX = 3
 
 interface MemoListProps {
@@ -15,12 +14,13 @@ interface MemoListProps {
 }
 
 function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
-  const { memos, filter, priorityFilter, tagFilter } = useMemoStore()
+  const { memos, filter, priorityFilter, tagFilter, sortOrder } = useMemoStore()
   const listRef = useRef<HTMLDivElement>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [focusSnapshot, setFocusSnapshot] = useState<{ ids: string[]; scrollTop: number } | null>(null)
   const [editingMemos, setEditingMemos] = useState<Record<string, Memo>>({})
   const scrollAnimRef = useRef<number | null>(null)
+  const prevSortOrderRef = useRef(sortOrder)
   // 记录上一帧各行几何，行消失（删除/远端同步）时补偿 scrollTop 保持视口连续
   const prevRowsRef = useRef<{ ids: string[]; rects: Map<string, { top: number; height: number }>; scrollTop: number } | null>(null)
 
@@ -50,24 +50,8 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   }, [filter, memos, priorityFilter, tagFilter])
 
   const sortedMemos = useMemo(() => {
-    return [...filteredMemos].sort((a, b) => {
-      // 状态分档：进行中置顶，未开始次之，已完成沉底
-      const rankDiff = STATUS_RANK[a.status] - STATUS_RANK[b.status]
-      if (rankDiff !== 0) return rankDiff
-      // 已完成记录按点击完成时间倒序，不再受优先级影响
-      if (a.status === 'completed') {
-        const completedTimeDiff = (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt)
-        if (completedTimeDiff !== 0) return completedTimeDiff
-        return b.createdAt.localeCompare(a.createdAt)
-      }
-      // 进行中 / 未开始：重要在前，再按创建时间倒序
-      const priorityOrder = { important: 0, unimportant: 1 }
-      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-        return priorityOrder[a.priority] - priorityOrder[b.priority]
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    })
-  }, [filteredMemos])
+    return sortMemos(filteredMemos, sortOrder)
+  }, [filteredMemos, sortOrder])
 
 
   const visibleMemos = useMemo(() => {
@@ -133,8 +117,13 @@ function MemoList({ focusedMemoId, onFocusMemoChange }: MemoListProps) {
   }
 
   useEffect(() => {
+    if (prevSortOrderRef.current !== sortOrder) {
+      prevSortOrderRef.current = sortOrder
+      cancelScrollAnim()
+      if (listRef.current && !focusedMemoId) listRef.current.scrollTop = 0
+    }
     setShowScrollTop(false)
-  }, [filter, priorityFilter, tagFilter, focusedMemoId])
+  }, [filter, priorityFilter, tagFilter, sortOrder, focusedMemoId])
 
   useEffect(() => {
     if (editingOutsideIndex >= 0) rowVirtualizer.scrollToIndex(editingOutsideIndex, { align: 'auto' })

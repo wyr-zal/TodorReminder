@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FixedWindowPosition, StorageInfo, TagSortMode } from '../../shared/types'
-import { useMemoStore } from '../store/memoStore'
+import { useMemoStore, type StatusFilter } from '../store/memoStore'
 import { getThemeMode, saveThemeMode, ThemeMode } from '../utils/theme'
 import type { CloudPreview, CloudStatus } from '../../shared/cloudTypes'
 
@@ -46,6 +46,13 @@ const fixedPositionOptions: { value: FixedWindowPosition; label: string }[] = [
   { value: 'right-center', label: '右侧居中' },
   { value: 'top-center', label: '顶部居中' },
   { value: 'bottom-center', label: '底部居中' }
+]
+
+const statusFilterOptions: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'not_started', label: '未开始' },
+  { value: 'in_progress', label: '进行中' },
+  { value: 'completed', label: '已完成' }
 ]
 
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
@@ -110,7 +117,7 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
   const [selectedStorageDir, setSelectedStorageDir] = useState('')
   const [storageMessage, setStorageMessage] = useState('')
   const [isMigratingStorage, setIsMigratingStorage] = useState(false)
-  const { tagSort, setTagSort } = useMemoStore()
+  const { tagSort, setTagSort, filter, setFilter } = useMemoStore()
 
   useEffect(() => {
     loadConfig()
@@ -450,6 +457,32 @@ function SyncSettings({ onClose }: SyncSettingsProps) {
                   })}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-2">下次按 Alt+Q 呼出时生效，设置自动保存</p>
+              </div>
+
+              <div className="pb-4 border-b border-slate-100">
+                <p className="text-[11px] font-medium text-slate-500 mb-2.5 tracking-wide uppercase">待办状态显示</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {statusFilterOptions.map(option => {
+                    const active = filter === option.value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setFilter(option.value)}
+                        aria-label={`状态筛选：${option.label}`}
+                        aria-pressed={active}
+                        className={`rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                            : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">选择列表显示的待办状态，设置自动保存</p>
               </div>
 
               <div>
