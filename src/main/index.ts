@@ -27,6 +27,7 @@ import { saveImage, getImageBase64, getImageBuffer, getExistingImagePath, delete
 import { constrainWindowBounds, getFixedPositionBounds, loadWindowState, saveWindowState } from './window-state'
 import { migrateStorageData, resolveStorageInfo } from './storage'
 import { createSnipastePreview, preserveSnipastePath } from './snipaste'
+import { getMissingPackagedRuntimeFiles } from './login-startup'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -246,7 +247,19 @@ function setWindowsRunStartup(enabled: boolean): void {
   if (enabled) {
     const command = getSilentStartupCommand()
     if (!command) {
-      console.warn('Skip login startup: packaged Focus Memo executable was not found.')
+      console.warn('Skip login startup: packaged Focus Memo executable was not found; keeping existing startup setting.')
+      return
+    }
+
+    const executablePath = getPackagedExecutablePath()
+    if (!executablePath) {
+      console.warn('Skip login startup: packaged Focus Memo executable path could not be resolved; keeping existing startup setting.')
+      return
+    }
+
+    const missing = getMissingPackagedRuntimeFiles(dirname(executablePath))
+    if (missing.length > 0) {
+      console.warn(`Disable login startup: packaged Focus Memo is incomplete. Missing: ${missing.join(', ')}`)
       deleteWindowsRunValue(LOGIN_ITEM_NAME)
       return
     }
