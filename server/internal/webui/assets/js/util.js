@@ -71,24 +71,32 @@ export const STATUS_LABELS = {
 
 export const STATUS_ORDER = { in_progress: 0, not_started: 1, completed: 2 };
 
-function timestamp(memo, order) {
-  const raw = memo.status === 'completed' && memo.completedAt ? memo.completedAt : memo.updatedAt || memo.createdAt;
-  const value = new Date(raw || 0).getTime();
-  return Number.isNaN(value) ? 0 : value;
+// 与桌面端 src/renderer/utils/memoSort.ts 的 compareTime 一致：
+// 先比时间戳，取不到有效时间时退回按原始时间字符串比较。
+function compareTime(a, b, order) {
+  const diff = new Date(a).getTime() - new Date(b).getTime();
+  if (diff !== 0 && !Number.isNaN(diff)) {
+    return order === 'asc' ? diff : -diff;
+  }
+  const left = String(a ?? '');
+  const right = String(b ?? '');
+  return order === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
 }
 
+// 与桌面端保持同一套排序：进行中 → 未开始 → 已完成；
+// 未完成组内重要在前、再按创建时间；已完成组按完成时间、再按创建时间。
 export function sortMemos(memos, order = 'desc') {
-  const direction = order === 'asc' ? 1 : -1;
   return [...memos].sort((a, b) => {
     const groupDiff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
     if (groupDiff !== 0) return groupDiff;
-    if (a.status !== 'completed') {
-      const priorityDiff = (a.priority === 'important' ? 0 : 1) - (b.priority === 'important' ? 0 : 1);
-      if (priorityDiff !== 0) return priorityDiff;
+    if (a.status === 'completed') {
+      const doneDiff = compareTime(a.completedAt ?? a.updatedAt, b.completedAt ?? b.updatedAt, order);
+      if (doneDiff !== 0) return doneDiff;
+      return compareTime(a.createdAt, b.createdAt, order);
     }
-    const timeDiff = (timestamp(a) - timestamp(b)) * direction;
-    if (timeDiff !== 0) return timeDiff;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    const priorityDiff = (a.priority === 'important' ? 0 : 1) - (b.priority === 'important' ? 0 : 1);
+    if (priorityDiff !== 0) return priorityDiff;
+    return compareTime(a.createdAt, b.createdAt, order);
   });
 }
 
@@ -108,16 +116,24 @@ export function statusCounts(memos) {
   return counts;
 }
 
-export function topTags(memos, limit = 12) {
-  const counts = new Map();
+// 与桌面端 getAllTags（默认「标签按最新修改」）一致：
+// 只保留还有未完成待办的标签，按该标签下最近一次更新时间倒序。
+export function topTags(memos) {
+  const info = new Map();
   for (const memo of memos) {
+    const incomplete = memo.status !== 'completed';
+    const updatedAt = String(memo.updatedAt || '');
     for (const tag of memo.tags || []) {
-      counts.set(tag, (counts.get(tag) || 0) + 1);
+      const cur = info.get(tag) || { count: 0, latestUpdatedAt: '' };
+      info.set(tag, {
+        count: cur.count + (incomplete ? 1 : 0),
+        latestUpdatedAt: updatedAt > cur.latestUpdatedAt ? updatedAt : cur.latestUpdatedAt
+      });
     }
   }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN'))
-    .slice(0, limit)
+  return [...info.entries()]
+    .filter(([, entry]) => entry.count > 0)
+    .sort((a, b) => b[1].latestUpdatedAt.localeCompare(a[1].latestUpdatedAt))
     .map(([tag]) => tag);
 }
 
