@@ -42,8 +42,18 @@ func TestLoad(t *testing.T) {
 		t.Fatal("accepted image pixel bound above the 12 MP limit")
 	}
 	env["MAX_IMAGE_PIXELS"] = "12000000"
+	env["WEB_LOCAL_ATTACHMENTS_DIR"] = `E:\Project\DesktopData\attachments`
 	if _, err := Load(get); err != nil {
-		t.Fatalf("rejected the 12 MP image pixel limit: %v", err)
+		t.Fatal("rejected local attachment directory prefix")
+	}
+	c, err = Load(get)
+	if err != nil || c.WebLocalAttachmentDir != `E:\Project\DesktopData\attachments` {
+		t.Fatalf("unexpected local attachment dir: %q err=%v", c.WebLocalAttachmentDir, err)
+	}
+	delete(env, "WEB_LOCAL_ATTACHMENTS_DIR")
+	c, err = Load(get)
+	if err != nil || c.WebLocalAttachmentDir != "" {
+		t.Fatalf("unexpected default local attachment dir: %q err=%v", c.WebLocalAttachmentDir, err)
 	}
 	delete(env, "MAX_UPLOAD_BYTES")
 	delete(env, "MAX_IMAGE_PIXELS")

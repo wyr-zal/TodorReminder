@@ -18,17 +18,18 @@ import (
 // session. Existing /api/v1 clients (the desktop app) bypass this handler
 // entirely and keep their previous behaviour.
 type Handler struct {
-	api          http.Handler
-	assets       fs.FS
-	hash         passwordHash
-	signer       sessionSigner
-	enabled      bool
-	disabledNote string
-	limiter      loginLimiter
+	api                   http.Handler
+	assets                fs.FS
+	hash                  passwordHash
+	signer                sessionSigner
+	enabled               bool
+	disabledNote          string
+	localAttachmentDir    string
+	limiter               loginLimiter
 }
 
 func New(cfg config.Config, api http.Handler) *Handler {
-	h := &Handler{api: api, assets: assetFiles}
+	h := &Handler{api: api, assets: assetFiles, localAttachmentDir: strings.TrimSpace(cfg.WebLocalAttachmentDir)}
 	if strings.TrimSpace(cfg.WebPasswordHash) == "" || strings.TrimSpace(cfg.WebSessionKey) == "" {
 		h.disabledNote = "网页端尚未设置访问口令，请在服务器配置 WEB_PASSWORD_HASH 与 WEB_SESSION_KEY 后重启服务。"
 		return h
@@ -152,9 +153,10 @@ func (h *Handler) sessionStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]any{
-		"enabled":       h.enabled,
-		"authenticated": h.authenticated(r),
-		"note":          h.disabledNote,
+		"enabled":              h.enabled,
+		"authenticated":        h.authenticated(r),
+		"note":                 h.disabledNote,
+		"localAttachmentDir":   h.localAttachmentDir,
 	})
 }
 

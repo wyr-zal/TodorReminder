@@ -218,7 +218,7 @@ func TestDisabledWhenNotConfigured(t *testing.T) {
 	handler := New(config.Config{}, stubAPI())
 
 	rec := do(handler, http.MethodGet, "/web/session", "", nil)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":false`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":false`) || !strings.Contains(rec.Body.String(), `"localAttachmentDir":""`) {
 		t.Fatalf("session status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	rec = do(handler, http.MethodPost, "/web/login", `{"password":"x"}`,

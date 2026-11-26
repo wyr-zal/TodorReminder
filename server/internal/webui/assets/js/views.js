@@ -54,6 +54,7 @@ export function memoCardHTML(memo, options = {}) {
          <button class="foot-btn danger" type="button" data-action="purge"><svg><use href="#i-trash"/></svg>彻底删除</button>
        </div>`
     : `<div class="memo-foot">
+         <button class="foot-btn" type="button" data-action="copy"><svg><use href="#i-copy"/></svg>复制</button>
          <button class="foot-btn" type="button" data-action="edit"><svg><use href="#i-edit"/></svg>编辑</button>
          <button class="foot-btn${memo.priority === 'important' ? ' active' : ''}" type="button" data-action="priority">
            <svg><use href="#i-flag"/></svg>${memo.priority === 'important' ? '重要' : '标为重要'}

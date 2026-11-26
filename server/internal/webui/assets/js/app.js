@@ -24,7 +24,8 @@ const state = {
   query: '',
   sort: readPref('fm-web-sort', 'desc'),
   limit: PAGE_SIZE,
-  metaLoaded: false
+  metaLoaded: false,
+  localAttachmentDir: ''
 };
 
 let draft = null;
@@ -132,6 +133,46 @@ async function refresh(options = {}) {
     if (seq !== refreshSeq) return;
     setSync('offline', '同步失败');
     if (!options.silent) toast(err.message || '同步失败', 'error');
+  }
+}
+
+function joinedPath(dir, name) {
+  const root = String(dir || '').replace(/[\\/]+$/, '');
+  return root ? `${root}\\${name}` : name;
+}
+
+// 与桌面端「复制整条待办」一致：正文 + 末尾标签行 + 图片路径段落，路径带引号方便直接喂 CLI。
+function memoCopyText(memo) {
+  const body = String(memo.content ?? '').trim();
+  const tags = [...new Set((memo.tags || []).map((tag) => String(tag).trim()).filter(Boolean))];
+  const tagText = tags.map((tag) => `#${tag}`).join(' ');
+  const text = [body, tagText].filter(Boolean).join('\n');
+  const ids = memo.attachmentIds || [];
+  if (!ids.length) return text;
+  const paths = ids.map((id) => `"${joinedPath(state.localAttachmentDir, `cloud-${id}.png`)}"`);
+  return [text, ['图片路径:', ...paths].join('\n')].filter(Boolean).join('\n\n');
+}
+
+async function copyMemo(memo) {
+  const text = memoCopyText(memo);
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(area);
+      if (!ok) throw new Error('copy failed');
+    }
+    toast(memo.attachmentIds?.length ? '已复制正文与图片路径' : '已复制');
+  } catch (err) {
+    toast('复制失败，请检查浏览器剪贴板权限', 'error');
   }
 }
 
@@ -562,6 +603,9 @@ function bindEvents() {
     const memo = state.memos.find((item) => item.id === card.dataset.id);
     if (!memo) return;
     switch (actionEl.dataset.action) {
+      case 'copy':
+        await copyMemo(memo);
+        break;
       case 'cycle':
         await cycleStatus(memo);
         break;
@@ -686,6 +730,7 @@ async function boot() {
   bindEvents();
   try {
     const session = await api.session();
+    if (typeof session.localAttachmentDir === 'string') state.localAttachmentDir = session.localAttachmentDir;
     if (!session.enabled) {
       hideApp(true);
       el.loginError.classList.add('hidden');

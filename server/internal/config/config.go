@@ -9,13 +9,14 @@ import (
 )
 
 type Config struct {
-	ListenAddr      string
-	DSN             string
-	AttachmentsDir  string
-	MaxUploadBytes  int64
-	MaxImagePixels  int64
-	WebPasswordHash string
-	WebSessionKey   string
+	ListenAddr             string
+	DSN                    string
+	AttachmentsDir         string
+	WebLocalAttachmentDir  string
+	MaxUploadBytes         int64
+	MaxImagePixels         int64
+	WebPasswordHash        string
+	WebSessionKey          string
 }
 
 func Load(get func(string) string) (Config, error) {
@@ -28,6 +29,7 @@ func Load(get func(string) string) (Config, error) {
 	}
 	c.WebPasswordHash = get("WEB_PASSWORD_HASH")
 	c.WebSessionKey = get("WEB_SESSION_KEY")
+	c.WebLocalAttachmentDir = strings.TrimSpace(get("WEB_LOCAL_ATTACHMENTS_DIR"))
 	if v := get("LISTEN_ADDR"); v != "" {
 		c.ListenAddr = v
 	}
