@@ -40,6 +40,12 @@ function cloudWindowVisible(): boolean {
   return !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !windowState.isHidden
 }
 
+function nudgeCloudSync(): void {
+  if (!cloudController) return
+  if (cloudWindowVisible()) cloudController.noteLocalChange()
+  else cloudController.schedule()
+}
+
 async function initCloudController(): Promise<void> {
   const controller = new CloudController(
     getCloudDatabase(),
@@ -879,19 +885,19 @@ function setupIPC() {
 
   ipcMain.handle(IPC_CHANNELS.MEMO_ADD, async (_, memo: Memo) => {
     const result = await createMemo(memo)
-    cloudController?.schedule()
+    cloudController?.noteLocalChange()
     return result
   })
 
   ipcMain.handle(IPC_CHANNELS.MEMO_UPDATE, async (_, { id, updates, expected }: { id: string; updates: Partial<Memo>; expected?: Memo }) => {
     const result = await updateMemo(id, updates, expected)
-    cloudController?.schedule()
+    cloudController?.noteLocalChange()
     return result
   })
 
   ipcMain.handle(IPC_CHANNELS.MEMO_DELETE, async (_, id: string) => {
     const result = await deleteMemo(id)
-    cloudController?.schedule()
+    cloudController?.noteLocalChange()
     return result
   })
 
@@ -1009,13 +1015,13 @@ function setupIPC() {
 
   ipcMain.handle('memo:restore', async (_, id: string) => {
     const result = await restoreMemo(id)
-    cloudController?.schedule()
+    cloudController?.noteLocalChange()
     return result
   })
 
   ipcMain.handle('memo:hard-delete', async (_, id: string) => {
     const result = await hardDeleteMemo(id)
-    cloudController?.schedule()
+    cloudController?.noteLocalChange()
     return result
   })
 
@@ -1048,7 +1054,7 @@ function setupIPC() {
   })
   ipcMain.handle('sync:preview', () => cloudController!.preview())
   ipcMain.handle('sync:confirm', (_, ticket: string) => cloudController!.confirm(ticket))
-  ipcMain.on('sync:online', () => cloudController?.schedule())
+  ipcMain.on('sync:online', () => nudgeCloudSync())
 
   // 设置操作
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
@@ -1267,7 +1273,7 @@ function startApp(): Promise<void> {
     registerShortcuts()
     setupIPC()
     await initCloudController()
-    powerMonitor.on('resume', () => cloudController?.schedule())
+    powerMonitor.on('resume', () => nudgeCloudSync())
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

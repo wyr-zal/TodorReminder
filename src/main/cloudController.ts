@@ -64,6 +64,7 @@ export class CloudController {
         const worker = new CloudSync(this.db, api, join(this.root, 'attachments'), this.onComplete)
         this.worker = worker
         await worker.start(this.windowVisible)
+        if ((await this.db.pending()).length) worker.noteLocalChange()
       }
       this.configError = null
     } catch (error) {
@@ -99,6 +100,8 @@ export class CloudController {
   }
 
   schedule(): void { if (!this.migrating) this.worker?.schedule() }
+
+  noteLocalChange(): void { if (!this.migrating) this.worker?.noteLocalChange() }
 
   async save(input: { url: string }): Promise<void> {
     return this.serialized(() => this.saveExclusive(input))

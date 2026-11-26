@@ -39,7 +39,7 @@ function App() {
     })
 
     const unsubscribeSync = window.electronAPI.sync.onComplete((result) => {
-      if (result.success || result.changed) loadMemos()
+      if (result.pulled) loadMemos()
     })
     const handleOnline = () => window.electronAPI.sync.online()
     window.addEventListener('online', handleOnline)

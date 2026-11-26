@@ -76,3 +76,4 @@ export interface CloudStatus {
 }
 export interface CloudConfigView { url: string; connected: boolean }
 export interface CloudPreview { ticket: string; localCount: number; remoteCount: number; conflicts: number; missingImages: string[] }
+export type CloudSyncResult = { success: boolean; changed: boolean; pulled?: boolean; error?: string }

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { CloudConfigView, CloudPreview, CloudStatus } from '../shared/cloudTypes'
+import type { CloudConfigView, CloudPreview, CloudStatus, CloudSyncResult } from '../shared/cloudTypes'
 import {
   IPC_CHANNELS,
   Memo,
@@ -61,8 +61,8 @@ const electronAPI = {
     preview: () => ipcRenderer.invoke('sync:preview') as Promise<CloudPreview>,
     confirm: (ticket: string) => ipcRenderer.invoke('sync:confirm', ticket) as Promise<void>,
     online: () => ipcRenderer.send('sync:online'),
-    onComplete: (callback: (result: { success: boolean; changed?: boolean; error?: string }) => void) => {
-      const handler = (_: unknown, result: { success: boolean; changed?: boolean; error?: string }) => callback(result)
+    onComplete: (callback: (result: CloudSyncResult) => void) => {
+      const handler = (_: unknown, result: CloudSyncResult) => callback(result)
       ipcRenderer.on(IPC_CHANNELS.SYNC_COMPLETE, handler)
       return () => { ipcRenderer.removeListener(IPC_CHANNELS.SYNC_COMPLETE, handler) }
     }
