@@ -77,26 +77,30 @@ export function memoCardHTML(memo, options = {}) {
 }
 
 export function listHTML(memos, options = {}) {
-  const { query = '', status = 'all', tag = '' } = options;
+  const { query = '', status = 'all', tag = '', limit = Number.POSITIVE_INFINITY } = options;
   const visible = memos.filter((memo) => {
     if (status !== 'all' && memo.status !== status) return false;
     if (tag && !(memo.tags || []).includes(tag)) return false;
     return true;
   });
-  if (!visible.length) return { html: '', count: 0 };
+  if (!visible.length) return { html: '', count: 0, shown: 0 };
   const groups = [
     ['in_progress', '进行中'],
     ['not_started', '未开始'],
     ['completed', '已完成']
   ];
   let html = '';
+  let shown = 0;
   for (const [key, label] of groups) {
+    if (shown >= limit) break;
     const items = visible.filter((memo) => memo.status === key);
     if (!items.length) continue;
     if (status === 'all') html += `<h2 class="group-label">${label} · ${items.length}</h2>`;
-    html += items.map((memo) => memoCardHTML(memo, { query })).join('');
+    const slice = items.slice(0, limit - shown);
+    html += slice.map((memo) => memoCardHTML(memo, { query })).join('');
+    shown += slice.length;
   }
-  return { html, count: visible.length };
+  return { html, count: visible.length, shown };
 }
 
 function segmented(name, current, options) {

@@ -419,6 +419,19 @@ button { cursor: pointer; border: 0; background: none; }
 .foot-btn.active { color: var(--important); }
 .foot-btn.danger { color: var(--important); margin-left: auto; }
 
+.load-more {
+  display: block;
+  margin: 8px auto 4px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+.load-more:active { background: var(--surface-2); }
+
 /* ---------- empty ---------- */
 .empty { text-align: center; padding: 64px 24px 24px; color: var(--muted); }
 .empty-mark {

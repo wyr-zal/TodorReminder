@@ -13,6 +13,8 @@ import { attachmentsEditor, composerHTML, listHTML, trashHTML } from './views.js
 
 const $ = (selector) => document.querySelector(selector);
 
+const PAGE_SIZE = 80;
+
 const state = {
   authenticated: false,
   memos: [],
@@ -21,6 +23,7 @@ const state = {
   tag: '',
   query: '',
   sort: readPref('fm-web-sort', 'desc'),
+  limit: PAGE_SIZE,
   metaLoaded: false
 };
 
@@ -141,8 +144,19 @@ function filteredMemos() {
 function render() {
   const base = filteredMemos();
   const counts = statusCounts(base);
-  const { html, count } = listHTML(base, { query: state.query, status: state.status, tag: state.tag });
+  const { html, count, shown } = listHTML(base, {
+    query: state.query,
+    status: state.status,
+    tag: state.tag,
+    limit: state.limit
+  });
   el.list.innerHTML = html;
+  if (shown < count) {
+    el.list.insertAdjacentHTML(
+      'beforeend',
+      `<button class="load-more" type="button" data-action="load-more">显示更多（还有 ${count - shown} 条）</button>`
+    );
+  }
   el.empty.classList.toggle('hidden', count > 0);
 
   if (!count) {
@@ -494,6 +508,7 @@ function bindEvents() {
     const chip = event.target.closest('.chip');
     if (!chip) return;
     state.status = chip.dataset.status;
+    state.limit = PAGE_SIZE;
     writePref('fm-web-status', state.status);
     render();
   });
@@ -502,16 +517,19 @@ function bindEvents() {
     const chip = event.target.closest('.chip');
     if (!chip) return;
     state.tag = state.tag === chip.dataset.tag ? '' : chip.dataset.tag;
+    state.limit = PAGE_SIZE;
     render();
   });
 
   el.search.addEventListener('input', () => {
     state.query = el.search.value;
+    state.limit = PAGE_SIZE;
     render();
   });
 
   $('#btn-sort').addEventListener('click', () => {
     state.sort = state.sort === 'desc' ? 'asc' : 'desc';
+    state.limit = PAGE_SIZE;
     writePref('fm-web-sort', state.sort);
     el.sortLabel.textContent = state.sort === 'asc' ? '最早' : '最新';
     state.memos = sortMemos(state.memos, state.sort);
@@ -533,8 +551,14 @@ function bindEvents() {
 
   el.list.addEventListener('click', async (event) => {
     const actionEl = event.target.closest('[data-action]');
+    if (!actionEl) return;
+    if (actionEl.dataset.action === 'load-more') {
+      state.limit += PAGE_SIZE;
+      render();
+      return;
+    }
     const card = event.target.closest('.memo');
-    if (!actionEl || !card) return;
+    if (!card) return;
     const memo = state.memos.find((item) => item.id === card.dataset.id);
     if (!memo) return;
     switch (actionEl.dataset.action) {
