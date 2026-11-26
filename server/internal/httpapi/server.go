@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"focus-memo/server/internal/attachments"
 	"focus-memo/server/internal/config"
 	"focus-memo/server/internal/store"
+	"focus-memo/server/internal/webui"
 )
 
 type Repository interface {
@@ -30,6 +32,7 @@ type Server struct {
 	repo  Repository
 	files *attachments.Storage
 	mux   *http.ServeMux
+	web   *webui.Handler
 }
 
 func New(cfg config.Config, repo Repository, files *attachments.Storage) (*Server, error) {
@@ -48,9 +51,14 @@ func New(cfg config.Config, repo Repository, files *attachments.Storage) (*Serve
 	s.mux.HandleFunc("GET /api/v1/memos/{id}", s.getMemo)
 	s.mux.HandleFunc("POST /api/v1/attachments", s.uploadAttachment)
 	s.mux.HandleFunc("GET /api/v1/attachments/{id}", s.getAttachment)
+	s.web = webui.New(cfg, s.mux)
 	return s, nil
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/healthz" {
+		s.web.ServeHTTP(w, r)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if expected := r.Header.Get("X-Focus-Dataset-ID"); expected != "" {

@@ -9,11 +9,13 @@ import (
 )
 
 type Config struct {
-	ListenAddr     string
-	DSN            string
-	AttachmentsDir string
-	MaxUploadBytes int64
-	MaxImagePixels int64
+	ListenAddr      string
+	DSN             string
+	AttachmentsDir  string
+	MaxUploadBytes  int64
+	MaxImagePixels  int64
+	WebPasswordHash string
+	WebSessionKey   string
 }
 
 func Load(get func(string) string) (Config, error) {
@@ -24,6 +26,8 @@ func Load(get func(string) string) (Config, error) {
 	if !filepath.IsAbs(c.AttachmentsDir) {
 		return Config{}, errors.New("ATTACHMENTS_DIR must be an absolute persistent directory")
 	}
+	c.WebPasswordHash = get("WEB_PASSWORD_HASH")
+	c.WebSessionKey = get("WEB_SESSION_KEY")
 	if v := get("LISTEN_ADDR"); v != "" {
 		c.ListenAddr = v
 	}

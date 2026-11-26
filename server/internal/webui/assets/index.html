@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<meta name="color-scheme" content="light dark">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="专注备忘录">
+<title>专注备忘录</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12"/><path d="M10 11v5M14 11v5"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 1 2.3 5.7"/><path d="M4 4v7h7"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4.5-1 9.9-9.9a2 2 0 0 0-2.8-2.8L5.7 16.2 4 20Z"/><path d="m13.5 7.5 3 3"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 21V4m0 1h9.5l-1.8 3.5L15.5 12H6"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m5 18 4.5-4.5 3.5 3.5 2.5-2.5L20 19"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h9"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></symbol>
+</svg>
+
+<div id="boot" class="boot">
+  <div class="boot-mark">专</div>
+  <p>正在连接…</p>
+</div>
+
+<section id="login" class="login hidden">
+  <div class="login-card">
+    <div class="login-mark">专</div>
+    <h1>专注备忘录</h1>
+    <p class="login-sub">手机网页版 · 与桌面端同步</p>
+    <form id="login-form" novalidate>
+      <label class="field-label" for="password">访问口令</label>
+      <input id="password" class="text-input" type="password" name="password" autocomplete="current-password"
+        placeholder="请输入访问口令" enterkeyhint="go" required>
+      <p id="login-note" class="login-note hidden"></p>
+      <p id="login-error" class="form-error hidden" role="alert"></p>
+      <button id="login-submit" class="btn primary block" type="submit">进入</button>
+    </form>
+    <p class="login-foot">仅限本人使用 · 数据保存在自建服务器</p>
+  </div>
+</section>
+
+<section id="app" class="app hidden">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">专</span>
+      <div class="brand-text">
+        <h1>专注备忘录</h1>
+        <p id="sync-status" class="sync-status"><span class="dot"></span><span id="sync-text">已同步</span></p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-trash" class="icon-btn" type="button" aria-label="回收站" title="回收站">
+        <svg><use href="#i-trash"/></svg>
+      </button>
+      <button id="btn-logout" class="icon-btn" type="button" aria-label="退出登录" title="退出登录">
+        <svg><use href="#i-logout"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <label class="search" for="search">
+      <svg><use href="#i-search"/></svg>
+      <input id="search" type="search" placeholder="搜索正文或 #标签" autocomplete="off" enterkeyhint="search">
+    </label>
+    <button id="btn-sort" class="sort-btn" type="button" title="切换排序">
+      <svg><use href="#i-sort"/></svg>
+      <span id="sort-label">最新</span>
+    </button>
+  </div>
+
+  <nav class="filters" aria-label="筛选">
+    <div id="status-chips" class="chips">
+      <button class="chip" data-status="all" type="button">全部 <b></b></button>
+      <button class="chip" data-status="in_progress" type="button">进行中 <b></b></button>
+      <button class="chip" data-status="not_started" type="button">未开始 <b></b></button>
+      <button class="chip" data-status="completed" type="button">已完成 <b></b></button>
+    </div>
+    <div id="tag-chips" class="chips tag-chips"></div>
+  </nav>
+
+  <main id="list" class="list" aria-live="polite"></main>
+
+  <div id="empty" class="empty hidden">
+    <div class="empty-mark">✳</div>
+    <p id="empty-title">还没有待办</p>
+    <p id="empty-sub" class="muted">点右下角 + 新建一条</p>
+  </div>
+
+  <button id="btn-new" class="fab" type="button" aria-label="新建待办">
+    <svg><use href="#i-plus"/></svg>
+  </button>
+</section>
+
+<div id="backdrop" class="backdrop hidden"></div>
+<section id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-label="编辑待办"></section>
+<div id="viewer" class="viewer hidden" role="dialog" aria-modal="true" aria-label="查看图片">
+  <button id="viewer-close" class="viewer-close" type="button" aria-label="关闭">
+    <svg><use href="#i-close"/></svg>
+  </button>
+  <img id="viewer-img" alt="">
+</div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<script type="module" src="/assets/js/app.js"></script>
+</body>
+</html>
