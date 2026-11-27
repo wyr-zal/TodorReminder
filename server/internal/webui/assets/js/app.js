@@ -31,6 +31,9 @@ const state = {
 let draft = null;
 let refreshSeq = 0;
 let toastTimer = 0;
+let lastRefreshAt = 0;
+// 切回前台时的最小刷新间隔：避免来回切标签页就重复拉取整份列表。
+const FOREGROUND_REFRESH_GAP_MS = 30_000;
 
 const el = {
   boot: $('#boot'),
@@ -126,6 +129,7 @@ async function refresh(options = {}) {
     if (seq !== refreshSeq) return;
     state.memos = sortMemos(memos, state.sort);
     render();
+    lastRefreshAt = Date.now();
     const now = new Date();
     setSync('ok', `已同步 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
   } catch (err) {
@@ -715,13 +719,12 @@ function bindEvents() {
     }
   });
 
+  // 只在回到前台时补一次拉取；页面停留期间不再定时轮询，改动由手动点状态条触发。
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.authenticated) refresh({ silent: true });
+    if (document.visibilityState !== 'visible' || !state.authenticated) return;
+    if (Date.now() - lastRefreshAt < FOREGROUND_REFRESH_GAP_MS) return;
+    refresh({ silent: true });
   });
-
-  setInterval(() => {
-    if (document.visibilityState === 'visible' && state.authenticated) refresh({ silent: true });
-  }, 60_000);
 }
 
 onUnauthorized(() => showLogin('登录已过期，请重新输入口令。'));
