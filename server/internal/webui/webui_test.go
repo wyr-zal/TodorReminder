@@ -205,6 +205,16 @@ func TestStaticAssetsAndHeaders(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
 		t.Fatalf("js status = %d type=%s", rec.Code, rec.Header().Get("Content-Type"))
 	}
+	// 网页端只在打开/回到前台/手动点击时拉取，不允许后台定时轮询。
+	script := rec.Body.String()
+	if strings.Contains(script, "setInterval") {
+		t.Fatalf("app.js must not poll on a timer")
+	}
+	for _, want := range []string{"visibilitychange", "FOREGROUND_REFRESH_GAP_MS"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("app.js missing %q", want)
+		}
+	}
 
 	for _, target := range []string{"/assets/../webui.go", "/assets/%2e%2e/webui.go", "/secret"} {
 		rec = do(handler, http.MethodGet, target, "", nil)
